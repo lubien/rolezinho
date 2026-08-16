@@ -112,6 +112,7 @@ defmodule RolezinhoWeb.HomeLive do
         <ul :if={@visible != []} class="mt-4 space-y-2.5">
           <li :for={event <- @visible}>
             <.role_card
+              id={"#{event.id}-role-card"}
               title={event.title}
               when_text={when_text(event)}
               category={event.category}

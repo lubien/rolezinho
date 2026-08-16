@@ -262,4 +262,83 @@ body {
   }
 }
 
-/* This file is for your main application CSS */
+/* <View Transitions> */
+
+:root {
+    --enter-anim:
+        210ms cubic-bezier(0, 0, 0.2, 1) 90ms both fade-in,
+        300ms cubic-bezier(0.4, 0, 0.2, 1) both slide-from-right;
+    --exit-anim:
+        90ms cubic-bezier(0.4, 0, 1, 1) both fade-out,
+        300ms cubic-bezier(0.4, 0, 0.2, 1) both slide-to-left;
+}
+
+@view-transition {
+    navigation: auto;
+    view-transition-type: page;
+}
+
+@media (prefers-reduced-motion) {
+    ::view-transition-group(*),
+    ::view-transition-old(*),
+    ::view-transition-new(*) {
+        animation: none !important;
+    }
+}
+@keyframes fade-in {
+    from {
+        opacity: 0;
+    }
+}
+@keyframes fade-out {
+    to {
+        opacity: 0;
+    }
+}
+@keyframes slide-from-right {
+    from {
+        transform: translateX(30px);
+    }
+}
+@keyframes slide-to-left {
+    to {
+        transform: translateX(-30px);
+    }
+}
+@keyframes slide-out-to-left {
+    to {
+        translate: -100vw 0;
+    }
+}
+@keyframes slide-out-to-bottom {
+    to {
+        translate: 0 100vh;
+    }
+}
+
+::view-transition-old(role-slide-out-left) {
+    opacity: 1;
+}
+
+::view-transition-group(role-slide-out-left) {
+    opacity: 1;
+    animation-name: slide-out-to-left;
+    z-index: 1;
+}
+::view-transition-old(role-slide-out-left) {
+    /* Uncomment below to see the background color transition */
+    /*background-color: white;*/
+    animation-name: slide-out-to-left;
+    opacity: 1;
+}
+::view-transition-new(role-slide-out-left) {
+    opacity: 1;
+}
+
+/* Uncomment below to see fix for title */
+
+/*::view-transition-old(match-role-title) {
+    display: none;
+}*/
+
+/* </View Transitions> */

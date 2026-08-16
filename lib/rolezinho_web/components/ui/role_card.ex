@@ -19,6 +19,7 @@ defmodule RolezinhoWeb.Components.UI.RoleCard do
   ## Examples
 
       <.role_card
+        id="beach-volleyball"
         title="Beach volleyball"
         when_text="Wednesday · 7pm to 9pm"
         category="Sport"
@@ -29,6 +30,7 @@ defmodule RolezinhoWeb.Components.UI.RoleCard do
         navigate={~p"/r/beach-volleyball"}
       />
   """
+  attr :id, :string, required: true
   attr :title, :string, required: true
   attr :when_text, :string, default: nil
   attr :category, :string, default: nil
@@ -44,6 +46,7 @@ defmodule RolezinhoWeb.Components.UI.RoleCard do
   def role_card(assigns) do
     ~H"""
     <.link
+      id={@id}
       navigate={@navigate}
       class={[
         "block rounded-card border border-hairline bg-base-100 p-4 shadow-card",
@@ -51,6 +54,7 @@ defmodule RolezinhoWeb.Components.UI.RoleCard do
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
         @class
       ]}
+      phx-hook="ViewTransitionHook"
     >
       <div :if={@category || @status} class="flex items-center gap-2">
         <span
@@ -68,7 +72,9 @@ defmodule RolezinhoWeb.Components.UI.RoleCard do
         </.status_pill>
       </div>
 
-      <div class="mt-2 text-lg font-extrabold tracking-tight">{@title}</div>
+      <div class="mt-2 text-lg font-extrabold tracking-tight" data-transition-name="match-role-title">
+        {@title}
+      </div>
       <div :if={@when_text} class="mt-0.5 text-xs text-muted">{@when_text}</div>
 
       <div :if={@names != [] || @filled} class="mt-3 flex items-center justify-between gap-3">

@@ -740,7 +740,16 @@ defmodule RolezinhoWeb.EventLive do
         </button>
       </:action>
 
-      <article class="space-y-8">
+      <article
+        id="role-card"
+        class="space-y-8"
+        phx-remove={
+          JS.dispatch("phx:start-view-transition",
+            to: "#role-card",
+            detail: %{transition_name: "role-slide-out-left", type: "page"}
+          )
+        }
+      >
         <header class="space-y-3">
           <div class="flex items-center gap-2 text-xs text-base-content/50">
             <.link navigate={~p"/"} class="hover:text-base-content">← Rolezinhos</.link>
@@ -767,7 +776,12 @@ defmodule RolezinhoWeb.EventLive do
           <!-- Screen actions belong beside the title. Loose between two cards
                they read as an orphan with no owner. -->
           <div class="flex items-start justify-between gap-3">
-            <h1 class="min-w-0 flex-1 text-2xl font-extrabold tracking-tight">{@event.title}</h1>
+            <h1
+              class="min-w-0 flex-1 text-2xl font-extrabold tracking-tight"
+              style="view-transition-name: match-role-title;"
+            >
+              {@event.title}
+            </h1>
 
             <div class="flex shrink-0 items-center gap-1.5">
               <button
