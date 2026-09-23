@@ -182,6 +182,9 @@ defmodule Rolezinho.Pix do
   @doc """
   Builds a static PIX BR Code payload for the given key. Follows the
   EMV® QRCPS-Merchant-Presented specification used by the Brazilian PIX.
+
+  Pass `amount_cents:` to embed the transaction amount (tag 54), so the bank app
+  opens with the value already filled in. Without it the payer types the amount.
   """
   @spec brcode(String.t(), keyword()) :: String.t()
   def brcode(pix_key, opts \\ []) when is_binary(pix_key) do
@@ -198,6 +201,7 @@ defmodule Rolezinho.Pix do
         tlv("26", merchant_account) <>
         tlv("52", "0000") <>
         tlv("53", "986") <>
+        amount_tlv(Keyword.get(opts, :amount_cents)) <>
         tlv("58", "BR") <>
         tlv("59", name) <>
         tlv("60", city) <>
@@ -220,6 +224,15 @@ defmodule Rolezinho.Pix do
   end
 
   # ---------- helpers ----------
+
+  # Tag 54 is optional and holds the amount with a dot and two decimals ("22.00").
+  # Integer arithmetic on cents, never floats, so the payload is exact.
+  defp amount_tlv(cents) when is_integer(cents) and cents > 0 do
+    decimals = cents |> rem(100) |> Integer.to_string() |> String.pad_leading(2, "0")
+    tlv("54", "#{div(cents, 100)}.#{decimals}")
+  end
+
+  defp amount_tlv(_), do: ""
 
   defp tlv(id, value) when is_binary(id) and is_binary(value) do
     len =

@@ -51,10 +51,21 @@ defmodule RolezinhoWeb.PaymentLive do
     |> Enum.find(&Attendee.owns?(&1, participant_id, user_id))
   end
 
-  defp pix_for(%Event{pix_key: key}) when is_binary(key) and key != "" do
+  # The copy-and-paste code and the QR carry the same payload, amount included,
+  # so the bank app opens with the value already filled in whichever way the
+  # person pays. The bare key stays available for banks that want only the key.
+  defp pix_for(%Event{pix_key: key, price_cents: cents}) when is_binary(key) and key != "" do
     case Pix.classify(key) do
-      {:ok, _type, canonical} -> %{key: canonical, display: Pix.display(key) || key}
-      :error -> nil
+      {:ok, _type, canonical} ->
+        %{
+          key: canonical,
+          display: Pix.display(key) || key,
+          code: Pix.brcode(canonical, amount_cents: cents),
+          qr_svg: Pix.qr_svg(canonical, amount_cents: cents, width: 176)
+        }
+
+      :error ->
+        nil
     end
   end
 
@@ -114,64 +125,101 @@ defmodule RolezinhoWeb.PaymentLive do
         <div class="space-y-2">
           <!-- RN-11: the app records a declaration, it does not verify a
                transfer, so the label describes what the person did elsewhere. -->
-          <button
-            :if={@row && not @row.paid}
-            type="button"
-            phx-click="mark_paid"
-            class="w-full rounded-cta bg-ink px-4 py-4 text-[15px] font-bold text-ink-content shadow-cta transition-transform active:scale-[.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          >
-            Já fiz o Pix
-          </button>
+          <.action_button :if={@row && not @row.paid} phx-click="mark_paid">
+            <.icon name="tabler-check" class="size-5" /> Já fiz o Pix
+          </.action_button>
 
-          <.link
-            navigate={~p"/r/#{@event.slug}"}
-            class="block w-full rounded-cta border-[1.5px] border-ink/15 px-4 py-3.5 text-center text-[15px] font-bold text-ink"
-          >
-            {if @row && @row.paid, do: "Ver a lista", else: "Pago depois"}
-          </.link>
+          <.action_button variant="outline" navigate={~p"/r/#{@event.slug}"}>
+            {if @row && not @row.paid, do: "Pago depois", else: "Ver a lista"}
+          </.action_button>
         </div>
       </:action>
       <div class="mx-auto flex min-h-full max-w-[420px] flex-col">
         <header>
-          <p class="text-[11px] font-bold uppercase tracking-wide text-accent">Você está dentro</p>
+          <p class="text-[11px] font-bold uppercase tracking-wide text-accent-ink">
+            {if @row, do: "Você está dentro", else: "Pagamento"}
+          </p>
           <h1 class="mt-1 text-2xl font-extrabold tracking-tight">{@event.title}</h1>
-          <p :if={@row} class="mt-0.5 text-[13px] text-muted">
+          <p :if={@row} class="mt-1 text-[13px] text-muted">
             {list_position_text(@event, @row)}
           </p>
         </header>
 
         <section
           :if={@pix}
-          class="mt-5 rounded-card border border-hairline bg-base-100 p-5 shadow-card"
+          aria-labelledby="payment-amount-label"
+          class="mt-5 rounded-card border border-hairline bg-base-100 p-5"
         >
-          <p class="text-center text-[11px] font-semibold uppercase tracking-wide text-muted">
-            Sua parte
-          </p>
-          <p class="mt-1 text-center text-[40px] font-extrabold leading-none tracking-tight">
-            {@amount}
+          <div :if={@amount} class="text-center">
+            <p
+              id="payment-amount-label"
+              class="text-[11px] font-bold uppercase tracking-wide text-muted"
+            >
+              Sua parte
+            </p>
+            <p class="mt-1 text-[40px] font-extrabold leading-none tracking-tight">{@amount}</p>
+          </div>
+
+          <p
+            :if={@row && @row.paid}
+            class="mt-4 flex items-center justify-center gap-1.5 rounded-row bg-tint px-3 py-2.5 text-[13px] font-bold text-accent-ink"
+          >
+            <.icon name="tabler-circle-check-filled" class="size-5" /> Você marcou como pago
           </p>
 
-          <.pix_qr
-            svg={Pix.qr_svg(@pix.key, width: 148)}
-            pix_key={@pix.display}
-            copy_value={@pix.key}
-            payee={@event.title}
-            amount={@amount}
-            class="mt-5"
-          >
-            <:action>
+          <ol class={["space-y-4", @amount && "mt-5"]}>
+            <li>
+              <p class="text-[13px] font-bold">
+                <span class="text-accent-ink">1.</span> Copie o código Pix
+              </p>
               <button
                 type="button"
-                id="copy-pix-key"
+                id="copy-pix-code"
                 phx-hook=".CopyText"
-                data-text={@pix.key}
-                data-copied-label="Copiado!"
-                class="text-[11px] font-bold text-accent"
+                data-text={@pix.code}
+                data-copied-label="Código copiado!"
+                class="mt-2 flex min-h-12 w-full items-center justify-center gap-2 rounded-cta bg-tint px-4 py-3 text-[15px] font-bold text-ink transition-transform active:scale-[.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               >
-                Copiar chave
+                <.icon name="tabler-copy" class="size-5 text-accent-ink" />
+                <span data-label aria-live="polite">Copiar código Pix</span>
               </button>
-            </:action>
-          </.pix_qr>
+            </li>
+            <li>
+              <p class="text-[13px] font-bold">
+                <span class="text-accent-ink">2.</span> Cole no app do banco
+              </p>
+              <p class="mt-0.5 text-[13px] text-muted">
+                Use a opção "Pix copia e cola"{if @amount,
+                  do: " — o valor já vem preenchido",
+                  else: ""}.
+              </p>
+            </li>
+          </ol>
+
+          <div class="mt-5 flex items-center gap-3 rounded-row border border-hairline px-3 py-2">
+            <div class="min-w-0 flex-1">
+              <p class="text-[11px] font-bold text-muted">Ou use só a chave</p>
+              <p class="truncate font-mono text-[15px] font-semibold text-ink">{@pix.display}</p>
+            </div>
+            <button
+              type="button"
+              id="copy-pix-key"
+              phx-hook=".CopyText"
+              data-text={@pix.key}
+              data-copied-label="Copiada!"
+              aria-label={"Copiar chave Pix #{@pix.display}"}
+              class="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-row px-2 text-[13px] font-bold text-accent-ink focus-visible:outline-2 focus-visible:outline-accent"
+            >
+              <.icon name="tabler-copy" class="size-4" />
+              <span data-label aria-live="polite">Copiar</span>
+            </button>
+          </div>
+
+          <.pix_qr
+            svg={@pix.qr_svg}
+            caption="Pagando de outro celular? Escaneie o QR."
+            class="mt-5 border-t border-ink/8 pt-5"
+          />
         </section>
 
         <div class="flex-1" />
@@ -180,10 +228,12 @@ defmodule RolezinhoWeb.PaymentLive do
       <script :type={Phoenix.LiveView.ColocatedHook} name=".CopyText">
         export default {
           mounted() {
+            // Only the label changes, so the icon beside it survives the swap.
+            const label = this.el.querySelector("[data-label]") || this.el
             this.el.addEventListener("click", async () => {
               const text = this.el.dataset.text || ""
               const done = this.el.dataset.copiedLabel || "Copiado!"
-              const original = this.el.innerText
+              const original = label.textContent
               try {
                 await navigator.clipboard.writeText(text)
               } catch (_) {
@@ -195,8 +245,9 @@ defmodule RolezinhoWeb.PaymentLive do
                 try { document.execCommand("copy") } catch (_) {}
                 document.body.removeChild(field)
               }
-              this.el.innerText = done
-              setTimeout(() => { this.el.innerText = original }, 1500)
+              label.textContent = done
+              clearTimeout(this.reset)
+              this.reset = setTimeout(() => { label.textContent = original }, 1500)
             })
           }
         }

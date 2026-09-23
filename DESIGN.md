@@ -16,6 +16,7 @@ colors:
   muted: "oklch(51.5% 0.0072 84.57)"
   secondary: "oklch(45% 0.012 80.52)"
   secondary-content: "oklch(100% 0 0)"
+  qr-paper: "oklch(100% 0 0)"
   base-100: "oklch(100% 0 0)"
   info: "oklch(62% 0.214 259.815)"
   info-content: "oklch(97% 0.014 254.604)"
@@ -36,6 +37,7 @@ colors-dark:
   muted: "oklch(67% 0.006 78.26)"
   secondary: "oklch(72% 0.012 80.52)"
   secondary-content: "oklch(15% 0.008 84.57)"
+  qr-paper: "oklch(100% 0 0)"
   base-100: "oklch(22% 0.009 84.57)"
   info: "oklch(58% 0.158 241.966)"
   info-content: "oklch(97% 0.013 236.62)"
@@ -253,6 +255,9 @@ A warm neutral ramp with two brand colors on top. The semantic colors (`danger`,
   actually needs.
 - `tint` — the warm peach block behind a highlighted value (amount, Pix key) and
   behind the "this is you" row. Text on it uses `accent-ink`.
+- `qr-paper` — the white field under a QR code, **the same in both themes**.
+  Scanners need dark modules on a light field; a QR drawn on the dark card cannot
+  be read. Used for nothing else.
 
 ### Semantics
 
