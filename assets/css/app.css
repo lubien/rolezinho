@@ -100,6 +100,11 @@
      actually sits. */
   --color-muted: oklch(51.5% 0.0072 84.57);
 
+  /* The paper a QR code is printed on. Scanners expect dark modules on a light
+     field, so this stays white in both themes — a QR on the dark card is
+     unreadable. Used for nothing else. */
+  --color-qr-paper: oklch(100% 0 0);
+
   /* Inter, self-hosted (see the @font-face blocks above). The rest of the stack
      is the fallback used only while the font loads. */
   --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -175,6 +180,8 @@
   /* The same role, inverted: light text held back from the foreground tone,
      still clearing 4.5:1 on both the canvas and a raised surface. */
   --color-muted: oklch(67% 0.006 78.26);
+  /* Deliberately the same as light: see --color-qr-paper in @theme. */
+  --color-qr-paper: oklch(100% 0 0);
 
   --color-secondary: oklch(72% 0.012 80.52);
   --color-secondary-content: oklch(15% 0.008 84.57);

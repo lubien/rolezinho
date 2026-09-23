@@ -37,6 +37,18 @@ defmodule Rolezinho.PixTest do
       assert brcode =~ "5303986"
       assert brcode =~ "5802BR"
     end
+
+    test "embeds the amount after the currency when given, in reais with two decimals" do
+      assert Pix.brcode("+5591985609019", amount_cents: 2200) =~ "5303986540522.005802BR"
+      assert Pix.brcode("+5591985609019", amount_cents: 1550) =~ "540515.50"
+      assert Pix.brcode("+5591985609019", amount_cents: 5) =~ "54040.05"
+    end
+
+    test "leaves the amount out when there is none" do
+      for cents <- [nil, 0] do
+        assert Pix.brcode("+5591985609019", amount_cents: cents) =~ "53039865802BR"
+      end
+    end
   end
 
   test "qr_svg/2 returns an SVG string" do
