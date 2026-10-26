@@ -418,6 +418,25 @@ defmodule RolezinhoWeb.SettingsLive do
           controle das listas em que já entrou.
         </p>
 
+        <!-- API keys shortcut: visible only to signed-in users; the
+             dedicated screen handles its own anonymous bounce. -->
+        <section
+          :if={@current_user}
+          class="mt-6 rounded-card border border-hairline bg-base-100 p-4 shadow-card"
+        >
+          <h2 class="text-[13px] font-extrabold">API</h2>
+          <p class="mt-0.5 text-[11px] leading-snug text-muted">
+            Chaves de API pra integrações: bots do WhatsApp, dashboards, scripts.
+            Cada chave tem permissões próprias.
+          </p>
+          <.link
+            navigate={~p"/me/chaves"}
+            class="mt-3 inline-flex items-center gap-1.5 rounded-row border border-ink/15 px-3 py-2 text-[11px] font-bold text-ink"
+          >
+            <.icon name="tabler-key" class="size-4" /> Minhas chaves
+          </.link>
+        </section>
+
         <div class="mt-5 border-t border-hairline pt-4 text-center">
           <.link
             :if={!@current_admin?}

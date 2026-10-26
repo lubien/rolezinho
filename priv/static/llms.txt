@@ -1,0 +1,22 @@
+# Rolezinho
+
+> App for organizing informal get-togethers. Each event lives at
+> `/r/<slug>`. Each group lives at `/g/<slug>`. Guests join
+> anonymously; creating a rolê or a group requires an account.
+
+## For agents and automation
+
+- [Agent and automation overview](/agents.md): entry point for
+  LLMs, WhatsApp bots, dashboards. Lists the three programmatic
+  surfaces and when to use each.
+- [REST API spec](/api.md): bearer-authenticated JSON API at
+  `/api/v1`. Create keys at `/me/chaves`.
+- [URL-driven update spec](/atualizar.md): clickable URLs an LLM
+  can hand a human to update attendee lists without API access.
+
+## For humans
+
+- [Home](/): public listing of open rolês and groups.
+- [Create a rolê](/criar): requires sign-in.
+- [Create a group](/g/criar): requires sign-in.
+- [Preferences](/me): per-user settings and API-key management.

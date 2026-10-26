@@ -395,6 +395,95 @@ anonymous input, treat the limit as part of the deliverable, not as a follow-up.
 
 ---
 
+## The REST API (2026-10)
+
+A separate access surface at `/api/v1`, bearer-authenticated via API
+keys the user creates at `/me/chaves`. Full spec at `/api.md`. The
+model is deliberately narrower than the UI's seven levels above:
+
+**Who can call the API.** Anyone holding a non-revoked API key. Keys
+are per-user; a user with no keys has no API access. The key owner
+is always a signed-in `users` row.
+
+**What a key can do.** Three scope families, each read/write:
+
+| Scope | Covers |
+|---|---|
+| `events:read` | list / get events (owned or participated) |
+| `events:write` | create / update / delete events (owned only) |
+| `groups:read` | list / get groups (owned only) |
+| `groups:write` | create / update / delete groups (owned only) |
+| `participants:read` | list participants (owned or participated) |
+| `participants:write` | add / edit / remove / promote (owned only) |
+
+Scopes are checked by `require_scope!/2` at the top of each
+controller action, before any ownership check — so a missing scope
+returns `403` even on resources the caller owns.
+
+**There is no admin scope.** The platform admin flag (set via
+`Accounts.make_admin_by_handle/1`) widens UI access across every
+user's resources; it does **not** widen API access. An admin's keys
+see only the admin's own resources, like any other user. If you need
+API-side cross-user operations, the UI or a remote console is the
+escape hatch. (Product decision, 2026-10.)
+
+**Invariants the API enforces.** Breaking any of these is a bug:
+
+1. **Secrets never leak in responses.** The API serializers
+   (`RolezinhoWeb.Api.Helpers`) explicitly omit:
+
+   - `events.password` (replaced by nothing — the field just isn't
+     in the response).
+   - `events.organizer_token` (bearer secret for cross-device
+     organizer rights).
+   - `events.created_by_user_id` (foreign-user id).
+   - `attendees.participant_id` (bearer secret for row claim).
+   - `attendees.user_id` (foreign-user id).
+   - `groups.password` (replaced by `has_password: boolean`).
+   - `groups.created_by_user_id` (foreign-user id).
+
+   Each omission is locked in by a dedicated assertion in
+   `test/rolezinho_web/controllers/api/v1/security_test.exs`.
+
+2. **Existence is never leaked via status-code differences.** A
+   stranger requesting someone else's resource gets `404`, byte-for-
+   byte identical to the response for a resource that doesn't exist.
+   The only `403` the API returns is "this scope is missing from
+   your key" — a statement about the key, not about the resource.
+
+3. **Scopes are checked before ownership.** A key missing `events:read`
+   trying to GET an event they own still gets `403`, not `200`.
+
+4. **Keys are stored as SHA-256 hashes.** The raw token is handed to
+   the user exactly once at creation and never recoverable. Keys
+   can be revoked but not rotated in-place; the UX is "revoke the
+   leaked key, create a new one".
+
+5. **Rate limiting is per-key.** 60 req/min + 10 000 req/day,
+   enforced by `Rolezinho.Accounts.ApiRateLimiter` (ETS fixed-window).
+   A key's quota exhaustion does not affect sibling keys from the
+   same user.
+
+6. **Response hardening.** Every API response (including `401` /
+   `403` / `429`) carries `X-Content-Type-Options: nosniff` and
+   `Cache-Control: private, no-store` via
+   `RolezinhoWeb.Plugs.ApiResponseHeaders` — so a shared cache (CDN,
+   corporate proxy) never retains an API response bound to a
+   specific user. The hardening plug runs before `ApiAuth` in the
+   pipeline so the headers travel on error responses too.
+
+**Defense in depth.** `config :phoenix, :filter_parameters` lists
+`password`, `password_hash`, `current_password`, `token`,
+`api_key`, `authorization`, and `encoded`. Any accidental logging
+of request params that touches these keys replaces the value with
+`[FILTERED]`.
+
+**Not in scope for v1.** Webhooks, server-sent events, bulk
+endpoints, OAuth, password-protected group unlock via API. See
+`/api.md` for the authoritative "what the API does NOT do" list.
+
+---
+
 ## Before closing out any change
 
 Three questions, every time:
@@ -406,3 +495,6 @@ Three questions, every time:
    re-check permission in the handler?
 3. **If the content is password-gated** — is the gate on the server, or merely
    hidden in the template?
+4. **If I'm adding an API endpoint or widening a scope** — does the response
+   serializer omit the sensitive fields listed above? Does the stranger case
+   return `404` and not `403`? Is there a security-test regression for both?

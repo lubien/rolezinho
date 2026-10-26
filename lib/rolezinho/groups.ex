@@ -28,6 +28,19 @@ defmodule Rolezinho.Groups do
   @doc "PubSub topic for a specific group slug."
   def topic(slug), do: "group:" <> slug
 
+  @doc """
+  Lists every group the given user created, newest-touched first.
+  Used by the REST API's `GET /groups` listing.
+  """
+  @spec list_owned_by(integer()) :: [Group.t()]
+  def list_owned_by(user_id) when is_integer(user_id) do
+    Repo.all(
+      from g in Group,
+        where: g.created_by_user_id == ^user_id,
+        order_by: [desc: g.updated_at, desc: g.id]
+    )
+  end
+
   @doc "Subscribes the caller to updates for a given group slug."
   def subscribe(slug), do: PubSub.subscribe(@pubsub, topic(slug))
 

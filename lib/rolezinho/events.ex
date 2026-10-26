@@ -154,6 +154,52 @@ defmodule Rolezinho.Events do
   def list_done, do: do_list(:done)
 
   @doc """
+  Every event the given user created, ordered by `updated_at desc`.
+
+  Unlike `list_updatable_for/2` this includes every status (done,
+  payments_only) and hidden events. Used by the REST API's
+  `GET /events` listing when the key carries `events:read`.
+  """
+  @spec list_owned_by(integer()) :: [Event.t()]
+  def list_owned_by(user_id) when is_integer(user_id) do
+    Repo.all(
+      from e in Event,
+        where: e.created_by_user_id == ^user_id,
+        order_by: [desc: e.updated_at, desc: e.id]
+    )
+  end
+
+  @doc """
+  Every event where the given user is a participant (on main or
+  wait list), ordered by `updated_at desc`.
+
+  Scoped by `user_id` on the attendee row, not by `participant_id`
+  (which is per-device and not durable across sessions). So this
+  only returns events a signed-in user joined — anonymous joins
+  don't show up here, which is fine for the API's "what have I
+  joined" story.
+  """
+  @spec list_participated_by(integer()) :: [Event.t()]
+  def list_participated_by(user_id) when is_integer(user_id) do
+    query =
+      from e in Event,
+        where:
+          fragment(
+            "EXISTS (SELECT 1 FROM unnest(?) att WHERE (att->>'user_id')::int = ?)",
+            e.main_list,
+            ^user_id
+          ) or
+            fragment(
+              "EXISTS (SELECT 1 FROM unnest(?) att WHERE (att->>'user_id')::int = ?)",
+              e.wait_list,
+              ^user_id
+            ),
+        order_by: [desc: e.updated_at, desc: e.id]
+
+    Repo.all(query)
+  end
+
+  @doc """
   Lists events the given signed-in user can update via `/atualizar`:
   everything they created that's still accepting changes to its list
   (`:active` or `:maybe`; not `:done`, not `:payments_only`), ordered

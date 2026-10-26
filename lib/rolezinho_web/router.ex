@@ -17,10 +17,22 @@ defmodule RolezinhoWeb.Router do
     plug :fetch_admin
     plug :fetch_participant
     plug :fetch_current_user
+    plug RolezinhoWeb.Plugs.AgentDiscovery
   end
 
   pipeline :admin_required do
     plug :require_admin
+  end
+
+  # REST API pipeline (2026-10). JSON-only, bearer-auth via
+  # `RolezinhoWeb.Plugs.ApiAuth`. Skips the browser pipeline
+  # entirely — no session, no CSP, no admin fetch, no participant
+  # fetch. The auth plug populates `:current_user` and
+  # `:current_api_key` from the bearer token.
+  pipeline :api do
+    plug :accepts, ["json"]
+    plug RolezinhoWeb.Plugs.ApiResponseHeaders
+    plug RolezinhoWeb.Plugs.ApiAuth
   end
 
   ## Public routes
@@ -35,6 +47,8 @@ defmodule RolezinhoWeb.Router do
       ] do
       live "/", HomeLive, :index
       live "/me", SettingsLive, :show
+      live "/me/chaves", ApiKeysLive, :index
+      live "/me/chaves/nova", ApiKeysLive, :new
       live "/r/:slug", EventLive, :show
       live "/r/:slug/convite", InviteLive, :show
       live "/r/:slug/pagamento", PaymentLive, :show
@@ -62,6 +76,9 @@ defmodule RolezinhoWeb.Router do
     get "/r/txt/:slug", RawController, :show
     get "/r/:slug/calendar", CalendarController, :show
     get "/atualizar.md", UpdateFromChatController, :docs
+    get "/api.md", DocsController, :api
+    get "/agents.md", DocsController, :agents
+    get "/llms.txt", DocsController, :llms
     post "/r/:slug/unlock", EventUnlockController, :unlock
     post "/r/:slug/join", JoinController, :create
     post "/criar", EventCreateController, :create
@@ -85,6 +102,31 @@ defmodule RolezinhoWeb.Router do
     get "/auth/:provider", AuthController, :request
     get "/auth/:provider/callback", AuthController, :callback
     delete "/auth/logout", AuthController, :delete
+  end
+
+  ## REST API (2026-10)
+  scope "/api/v1", RolezinhoWeb.Api.V1 do
+    pipe_through :api
+
+    get "/auth/whoami", AuthController, :whoami
+
+    get "/events", EventController, :index
+    get "/events/:slug", EventController, :show
+    post "/events", EventController, :create
+    patch "/events/:slug", EventController, :update
+    delete "/events/:slug", EventController, :delete
+
+    get "/events/:slug/participants", ParticipantController, :index
+    post "/events/:slug/participants", ParticipantController, :create
+    patch "/events/:slug/participants/:index", ParticipantController, :update
+    delete "/events/:slug/participants/:index", ParticipantController, :delete
+    post "/events/:slug/participants/:index/promote", ParticipantController, :promote
+
+    get "/groups", GroupController, :index
+    get "/groups/:slug", GroupController, :show
+    post "/groups", GroupController, :create
+    patch "/groups/:slug", GroupController, :update
+    delete "/groups/:slug", GroupController, :delete
   end
 
   ## Admin-only routes — the ADMIN dashboard proper. Edit surfaces

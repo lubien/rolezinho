@@ -23,6 +23,7 @@ defmodule Rolezinho.Accounts do
 
   alias Ecto.Changeset
   alias Ecto.Multi
+  alias Rolezinho.Accounts.ApiKey
   alias Rolezinho.Accounts.PasswordResetToken
   alias Rolezinho.Accounts.User
   alias Rolezinho.Accounts.UserNotifier
@@ -39,6 +40,14 @@ defmodule Rolezinho.Accounts do
   # is `:crypto.hash(:sha256, token)`, so a DB dump does not translate
   # to instant reset ability.
   @reset_token_bytes 32
+
+  # API-key tokens are also 32 bytes of randomness. Prefix `rk_live_`
+  # is prepended so a leaked key is instantly identifiable in logs
+  # and the first 16 chars (prefix + 8 of randomness) are safe to
+  # display in the UI as a tag.
+  @api_key_bytes 32
+  @api_key_prefix "rk_live_"
+  @api_key_prefix_display_len 16
 
   @doc """
   Loads a user by primary key. Returns `nil` when not found (or when `nil` is
@@ -456,6 +465,159 @@ defmodule Rolezinho.Accounts do
     DateTime.utc_now()
     |> DateTime.add(@reset_token_ttl_seconds, :second)
     |> DateTime.truncate(:second)
+  end
+
+  # ---------- API keys ----------
+
+  @doc """
+  Lists every API key belonging to `user`, newest first. Includes
+  revoked keys — the UI shows them visually distinct so the user
+  can tell "this was active then, I revoked it when" without
+  mysterious gaps in the list.
+  """
+  @spec list_api_keys_for(User.t()) :: [ApiKey.t()]
+  def list_api_keys_for(%User{id: user_id}) do
+    # Secondary sort by `id desc` so two keys inserted within the
+    # same second (`inserted_at` is truncated to seconds) still sort
+    # deterministically newest-first. Without this, same-second
+    # ties are implementation-defined and flaky tests follow.
+    Repo.all(
+      from k in ApiKey,
+        where: k.user_id == ^user_id,
+        order_by: [desc: k.inserted_at, desc: k.id]
+    )
+  end
+
+  @doc """
+  Fetches one API key by id, scoped to `user`. Returns `nil` on
+  miss (not found or belongs to a different user) — the two cases
+  must look the same to the caller to avoid leaking existence.
+  """
+  @spec get_api_key_for(User.t(), integer()) :: ApiKey.t() | nil
+  def get_api_key_for(%User{id: user_id}, key_id) when is_integer(key_id) do
+    Repo.get_by(ApiKey, id: key_id, user_id: user_id)
+  end
+
+  def get_api_key_for(_, _), do: nil
+
+  @doc """
+  Creates a new API key for `user`.
+
+  Returns `{:ok, key, raw_token}` on success. The raw token is the
+  only time the plaintext ever surfaces — after this function
+  returns the row carries only its SHA-256 hash. The UI shows the
+  raw token to the user once with a prominent "copy now, you won't
+  see it again" warning.
+
+  Returns `{:error, changeset}` on validation failure (empty name,
+  invalid scope).
+  """
+  @spec create_api_key(User.t(), map()) ::
+          {:ok, ApiKey.t(), String.t()} | {:error, Changeset.t()}
+  def create_api_key(%User{id: user_id}, params) when is_map(params) do
+    {raw_token, hash, prefix} = generate_api_key()
+
+    attrs = %{
+      user_id: user_id,
+      name: Map.get(params, "name"),
+      key_hash: hash,
+      key_prefix: prefix,
+      permissions: Map.get(params, "permissions", [])
+    }
+
+    attrs
+    |> ApiKey.create_changeset()
+    |> Repo.insert()
+    |> case do
+      {:ok, key} -> {:ok, key, raw_token}
+      {:error, _} = err -> err
+    end
+  end
+
+  @doc """
+  Revokes an API key.
+
+  Idempotent: a already-revoked key is a no-op `{:ok, key}`. A key
+  that doesn't belong to `user` returns `{:error, :not_found}` —
+  same shape as `get_api_key_for/2` returning `nil`, so the caller
+  never has to branch on "is it mine".
+  """
+  @spec revoke_api_key(User.t(), integer()) ::
+          {:ok, ApiKey.t()} | {:error, :not_found}
+  def revoke_api_key(%User{} = user, key_id) do
+    case get_api_key_for(user, key_id) do
+      nil ->
+        {:error, :not_found}
+
+      %ApiKey{revoked_at: %DateTime{}} = key ->
+        {:ok, key}
+
+      %ApiKey{} = key ->
+        key
+        |> ApiKey.revoke_changeset(DateTime.utc_now())
+        |> Repo.update()
+    end
+  end
+
+  @doc """
+  Resolves a raw token to its owning `{user, api_key}` pair.
+
+  Returns `:error` for a missing / malformed / revoked / unknown
+  token. The caller (`RolezinhoWeb.Plugs.ApiAuth`) treats every
+  failure identically (401), so this function doesn't bother
+  distinguishing them.
+
+  Constant-time-ish: the SHA-256 hash runs even on an unknown
+  token, which keeps the "does this key exist" timing signal very
+  flat. Not perfect (there's still a Repo roundtrip difference) but
+  closer to constant than a short-circuit on prefix mismatch.
+  """
+  @spec authenticate_api_key(String.t() | nil) ::
+          {:ok, User.t(), ApiKey.t()} | :error
+  def authenticate_api_key(token) when is_binary(token) and byte_size(token) > 0 do
+    hash = hash_token(token)
+
+    query =
+      from k in ApiKey,
+        where: k.key_hash == ^hash and is_nil(k.revoked_at),
+        preload: [:user]
+
+    case Repo.one(query) do
+      %ApiKey{user: %User{} = user} = key -> {:ok, user, key}
+      _ -> :error
+    end
+  end
+
+  def authenticate_api_key(_), do: :error
+
+  @doc """
+  Stamps `last_used_at` on a key. Called from the API auth plug on
+  every successful request so the UI can tell live keys from
+  abandoned ones.
+
+  Best-effort: a failed update is logged and swallowed so a flaky
+  DB write doesn't take down an otherwise-fine API request.
+  """
+  @spec touch_api_key(ApiKey.t()) :: :ok
+  def touch_api_key(%ApiKey{} = key) do
+    key
+    |> ApiKey.touch_changeset(DateTime.utc_now())
+    |> Repo.update()
+
+    :ok
+  rescue
+    _ -> :ok
+  end
+
+  # Returns `{raw_token, hash, prefix}`. The raw token is
+  # `rk_live_<43 url-safe chars>`; the hash is SHA-256 of that; the
+  # prefix is the first 16 chars of the raw token.
+  defp generate_api_key do
+    secret = @api_key_bytes |> :crypto.strong_rand_bytes() |> Base.url_encode64(padding: false)
+    raw = @api_key_prefix <> secret
+    hash = hash_token(raw)
+    prefix = String.slice(raw, 0, @api_key_prefix_display_len)
+    {raw, hash, prefix}
   end
 
   @doc """

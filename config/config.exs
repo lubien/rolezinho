@@ -12,6 +12,23 @@ config :rolezinho,
   generators: [timestamp_type: :utc_datetime],
   admin_password: "admin"
 
+# Defense in depth: Phoenix filters these keys out of logged request
+# params so a request body that happens to be logged (via a crash,
+# a plug that logs, a dev `IO.inspect(conn)`) never surfaces a
+# secret in plaintext. Covers the auth code paths (password, reset
+# tokens) and the 2026-10 REST API tokens.
+config :phoenix,
+       :filter_parameters,
+       [
+         "password",
+         "password_hash",
+         "current_password",
+         "token",
+         "api_key",
+         "authorization",
+         "encoded"
+       ]
+
 # Configure the endpoint
 config :rolezinho, RolezinhoWeb.Endpoint,
   url: [host: "localhost"],

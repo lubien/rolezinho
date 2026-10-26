@@ -14,6 +14,11 @@ defmodule Rolezinho.Application do
     # hitting `/entrar/esqueci` after boot never races the table.
     :ok = Rolezinho.Accounts.ResetRateLimiter.init()
 
+    # Same shape for the REST API's per-key rate limiter. Two
+    # windows (minute + day), both consulted on every authenticated
+    # request. See the module docs for the tuning.
+    :ok = Rolezinho.Accounts.ApiRateLimiter.init()
+
     children = [
       RolezinhoWeb.Telemetry,
       Rolezinho.Repo,
