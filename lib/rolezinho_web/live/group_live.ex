@@ -58,13 +58,35 @@ defmodule RolezinhoWeb.GroupLive do
         socket.assigns[:current_user_id]
       )
 
+    # Hidden events on the group page: shown only to the admin and
+    # the group's own creator. An unlocked-but-not-owning visitor,
+    # even one holding the group password, keeps the old behaviour
+    # — they see the public event list, and hidden events stay
+    # reachable only by direct URL (same rule as the home page).
+    #
+    # `Group.owned_by?/3` is deliberately narrower than
+    # `editable_by?/4` for exactly this call site: an unlocked-only
+    # visitor may edit, but should not see what the owner chose to
+    # hide.
+    owner? =
+      Group.owned_by?(
+        group,
+        socket.assigns.current_admin?,
+        socket.assigns[:current_user_id]
+      )
+
     events =
-      if accessible?, do: Groups.list_events(group, visibility: :public), else: []
+      cond do
+        not accessible? -> []
+        owner? -> Groups.list_events(group, visibility: :with_hidden)
+        true -> Groups.list_events(group, visibility: :public)
+      end
 
     socket
     |> assign(:group, group)
     |> assign(:accessible?, accessible?)
     |> assign(:editable?, editable?)
+    |> assign(:owner?, owner?)
     |> assign(:password_protected?, Group.password_protected?(group))
     |> assign(:events, events)
     |> assign(:page_title, page_title_for(group, socket))

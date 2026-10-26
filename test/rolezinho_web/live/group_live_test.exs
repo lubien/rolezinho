@@ -6,7 +6,7 @@ defmodule RolezinhoWeb.GroupLiveTest do
   alias Rolezinho.Events
   alias Rolezinho.Groups
 
-  defp create_group(overrides \\ %{}) do
+  defp create_group(overrides) do
     defaults = %{"name" => "Vôlei do Bairro", "slug" => "vb", "visibility" => "public"}
     {:ok, group} = Groups.create(Map.merge(defaults, overrides))
     group
@@ -198,17 +198,125 @@ defmodule RolezinhoWeb.GroupLiveTest do
   end
 
   describe "hidden events inside a group" do
+    # 2026-09 rule change: the group's own owner (and the platform
+    # admin) now sees hidden events on the group page. Unlocked-only
+    # visitors and anonymous callers still don't — hidden stays
+    # reachable to them only by direct URL, same as on the home page.
     setup do
-      group = create_group()
-      # Create as admin so the event starts active, then set hidden.
+      # Build a real user to own the group so the "created_by"
+      # branch of `Group.owned_by?/3` gets exercised.
+      n = System.unique_integer([:positive]) |> Integer.to_string() |> String.pad_leading(4, "0")
+
+      {:ok, owner} =
+        Rolezinho.Accounts.register_user(%{
+          "username" => "gowner#{n}",
+          "password" => "supersecret"
+        })
+
+      # Create the group under `owner`, then attach an event to it and
+      # flip the event's hidden flag.
+      {:ok, group} =
+        Groups.create(
+          %{
+            "name" => "Casa dos Ocultos",
+            "slug" => "casa-oc-#{System.unique_integer([:positive])}"
+          },
+          created_by_user_id: owner.id
+        )
+
       event = create_event(group, %{"title" => "Ver-me se souber", "slug" => "hidden-role"})
       {:ok, event} = Events.set_hidden(event, true)
-      %{group: group, event: event}
+
+      %{group: group, owner: owner, event: event}
     end
 
-    test "are not listed on the group page even to admin", %{conn: conn, group: group} do
+    defp signed_in(conn, user) do
+      conn
+      |> Plug.Test.init_test_session(%{})
+      |> Plug.Conn.put_session(:current_user_id, user.id)
+    end
+
+    test "admin sees the hidden event on the group page", %{conn: conn, group: group} do
       {:ok, _view, html} = live(admin_conn(conn), ~p"/g/#{group.slug}")
+      assert html =~ "Ver-me se souber"
+    end
+
+    test "group owner sees the hidden event on the group page",
+         %{conn: conn, group: group, owner: owner} do
+      {:ok, _view, html} = live(signed_in(conn, owner), ~p"/g/#{group.slug}")
+      assert html =~ "Ver-me se souber"
+    end
+
+    test "anonymous visitor does NOT see the hidden event",
+         %{conn: conn, group: group} do
+      {:ok, _view, html} = live(conn, ~p"/g/#{group.slug}")
       refute html =~ "Ver-me se souber"
+    end
+
+    test "a signed-in non-owner user does NOT see the hidden event",
+         %{conn: conn, group: group} do
+      # Different user, no admin flag, not the group creator.
+      n = System.unique_integer([:positive]) |> Integer.to_string() |> String.pad_leading(4, "0")
+
+      {:ok, stranger} =
+        Rolezinho.Accounts.register_user(%{
+          "username" => "gstr#{n}",
+          "password" => "supersecret"
+        })
+
+      {:ok, _view, html} = live(signed_in(conn, stranger), ~p"/g/#{group.slug}")
+      refute html =~ "Ver-me se souber"
+    end
+
+    test "unlocked-but-not-owning visitor does NOT see the hidden event",
+         %{conn: conn} do
+      # A password-protected group unlocked from a non-owner session:
+      # they get read + edit access via the unlock, but hidden events
+      # remain the owner's private view.
+      n = System.unique_integer([:positive]) |> Integer.to_string() |> String.pad_leading(4, "0")
+
+      {:ok, owner} =
+        Rolezinho.Accounts.register_user(%{
+          "username" => "gpo#{n}",
+          "password" => "supersecret"
+        })
+
+      {:ok, pwd_group} =
+        Groups.create(
+          %{
+            "name" => "Aberto com senha",
+            "slug" => "pwd-#{System.unique_integer([:positive])}",
+            "password" => "s3nha"
+          },
+          created_by_user_id: owner.id
+        )
+
+      pwd_event =
+        create_event(pwd_group, %{
+          "title" => "Ver-me apenas dono",
+          "slug" => "pwd-hidden-#{System.unique_integer([:positive])}"
+        })
+
+      {:ok, _} = Events.set_hidden(pwd_event, true)
+
+      # An unrelated user unlocks the group by password.
+      {:ok, unlocker} =
+        Rolezinho.Accounts.register_user(%{
+          "username" => "gun#{n}",
+          "password" => "supersecret"
+        })
+
+      # Combined session in one shot — `init_test_session/2` resets
+      # state, so chaining the two helpers here would drop the
+      # signed-in user.
+      conn =
+        conn
+        |> Plug.Test.init_test_session(%{})
+        |> Plug.Conn.put_session(:current_user_id, unlocker.id)
+        |> Plug.Conn.put_session(:unlocked_groups, MapSet.new([pwd_group.slug]))
+
+      {:ok, _view, html} = live(conn, ~p"/g/#{pwd_group.slug}")
+      refute html =~ "Ver-me apenas dono"
     end
   end
 end

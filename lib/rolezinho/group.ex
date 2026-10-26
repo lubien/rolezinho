@@ -125,6 +125,26 @@ defmodule Rolezinho.Group do
     end
   end
 
+  @doc """
+  Narrower than `editable_by?/4`: returns true only for the platform
+  admin or the group's own creator.
+
+  Used where a piece of state must not leak to *unlocked-but-not-
+  owning* visitors even if they can otherwise edit the group. The
+  motivating case is hidden events on the group page (2026-09): a
+  visitor holding the unlock can see and edit the group but must
+  not see events the owner deliberately hid — those stay reachable
+  only by direct URL, exactly like on the home page.
+  """
+  @spec owned_by?(t(), boolean(), integer() | nil) :: boolean()
+  def owned_by?(%Group{} = group, admin?, current_user_id \\ nil) do
+    cond do
+      admin? -> true
+      created_by?(group, current_user_id) -> true
+      true -> false
+    end
+  end
+
   defp created_by?(%Group{created_by_user_id: same}, same) when is_integer(same), do: true
   defp created_by?(_group, _user_id), do: false
 
