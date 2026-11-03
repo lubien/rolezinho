@@ -1711,7 +1711,6 @@ defmodule RolezinhoWeb.EventLive do
             phx-hook=".ShareEvent"
             data-title={@event.title}
             data-text={@shareable_text}
-            data-url={@event_url}
             class="flex-1 rounded-row bg-ink py-3 text-xs font-bold text-ink-content"
           >
             Compartilhar
@@ -2076,15 +2075,16 @@ defmodule RolezinhoWeb.EventLive do
           mounted() {
             this.el.addEventListener("click", async () => {
               const title = this.el.dataset.title || "Rolezinho"
-              const text = this.el.dataset.text || ""
-              const url = this.el.dataset.url || location.href
+              // The text already opens with the event URL; passing `url` too
+              // makes share targets (WhatsApp, etc.) append it a second time.
+              const text = this.el.dataset.text || location.href
               if (navigator.share) {
                 try {
-                  await navigator.share({ title, text, url })
+                  await navigator.share({ title, text })
                 } catch (_) {}
               } else {
                 try {
-                  await navigator.clipboard.writeText(text + "\n" + url)
+                  await navigator.clipboard.writeText(text)
                   const original = this.el.innerHTML
                   this.el.innerText = "Link copiado!"
                   setTimeout(() => { this.el.innerHTML = original }, 1500)
