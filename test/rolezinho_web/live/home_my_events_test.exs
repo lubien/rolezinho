@@ -183,9 +183,11 @@ defmodule RolezinhoWeb.HomeMyEventsTest do
       )
 
     conn = signed_in(conn, user)
-    {:ok, _view, html} = live(conn, ~p"/")
+    {:ok, view, _html} = live(conn, ~p"/")
 
-    refute html =~ "Dentro do grupo"
+    # No card links to it. The title alone is not the check: the
+    # multi-share sheet lists every owned rolê, grouped ones included.
+    refute has_element?(view, ~s(a[href="/r/in-group-1"]))
   end
 
   test "a hidden grouped rolê the user owns also does NOT surface on the home",
@@ -218,8 +220,10 @@ defmodule RolezinhoWeb.HomeMyEventsTest do
     {:ok, _} = Events.set_hidden(mine, true)
 
     conn = signed_in(conn, user)
-    {:ok, _view, html} = live(conn, ~p"/")
+    {:ok, view, _html} = live(conn, ~p"/")
 
-    refute html =~ "Escondido no grupo"
+    # No card links to it. The title alone is not the check: the
+    # multi-share sheet lists every owned rolê, grouped ones included.
+    refute has_element?(view, ~s(a[href="/r/hidden-in-group-1"]))
   end
 end

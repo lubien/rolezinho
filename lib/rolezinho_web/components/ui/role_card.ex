@@ -127,5 +127,5 @@ defmodule RolezinhoWeb.Components.UI.RoleCard do
   defp default_status_label("done"), do: "Encerrado"
   defp default_status_label("debt"), do: "Pix pendente"
   defp default_status_label("payments_only"), do: "Só pagamentos"
-  defp default_status_label("maybe"), do: "Averiguando Resenha"
+  defp default_status_label("maybe"), do: Rolezinho.Event.maybe_status_label()
 end

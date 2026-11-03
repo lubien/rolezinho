@@ -19,6 +19,8 @@ defmodule RolezinhoWeb.HomeLive do
   alias Rolezinho.Events
   alias Rolezinho.Group
   alias Rolezinho.Groups
+  alias Rolezinho.MultiShare
+  alias RolezinhoWeb.Components.UI.BottomSheet
 
   # Below this, scanning the list is faster than filtering it.
   defp filter_threshold, do: 4
@@ -31,6 +33,9 @@ defmodule RolezinhoWeb.HomeLive do
      socket
      |> assign(:page_title, "Rolezinhos")
      |> assign(:category, "all")
+     |> assign(:shareable_events, [])
+     |> assign(:share_selected, nil)
+     |> assign(:share_password?, false)
      |> load_events()}
   end
 
@@ -40,6 +45,30 @@ defmodule RolezinhoWeb.HomeLive do
   @impl true
   def handle_event("filter", %{"id" => category}, socket) do
     {:noreply, socket |> assign(:category, category) |> apply_filter()}
+  end
+
+  # Ids arrive from the client, so only ids of the caller's own shareable
+  # events are honored — anything else is dropped before it can reach the
+  # text.
+  def handle_event("multi_share_toggle", %{"id" => id}, socket) do
+    %{share_selected: selected, shareable_events: shareable} = socket.assigns
+
+    selected =
+      with {id, ""} <- Integer.parse(id),
+           true <- Enum.any?(shareable, &(&1.id == id)) do
+        toggle_member(selected, id)
+      else
+        _ -> selected
+      end
+
+    {:noreply, socket |> assign(:share_selected, selected) |> assign_multi_share_text()}
+  end
+
+  def handle_event("multi_share_toggle_password", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:share_password?, not socket.assigns.share_password?)
+     |> assign_multi_share_text()}
   end
 
   defp load_events(socket) do
@@ -52,7 +81,49 @@ defmodule RolezinhoWeb.HomeLive do
     |> assign(:events, Events.list_home_for(user_id))
     |> assign(:groups, Groups.list_public())
     |> apply_filter()
+    |> load_shareable(user_id)
   end
+
+  # Everything starts selected; on a live refresh the existing selection is
+  # kept, minus events that stopped being shareable, plus newly created ones.
+  defp load_shareable(socket, user_id) do
+    shareable = Events.list_shareable_for(user_id)
+    ids = MapSet.new(shareable, & &1.id)
+
+    selected =
+      merge_selection(socket.assigns.share_selected, socket.assigns.shareable_events, ids)
+
+    socket
+    |> assign(:shareable_events, shareable)
+    |> assign(:share_selected, selected)
+    |> assign(:share_has_password?, Enum.any?(shareable, &Event.password_protected?/1))
+    |> assign_multi_share_text()
+  end
+
+  defp merge_selection(nil, _previous, ids), do: ids
+
+  defp merge_selection(selected, previous, ids) do
+    new_ids = MapSet.difference(ids, MapSet.new(previous, & &1.id))
+    selected |> MapSet.intersection(ids) |> MapSet.union(new_ids)
+  end
+
+  defp toggle_member(set, id) do
+    if MapSet.member?(set, id), do: MapSet.delete(set, id), else: MapSet.put(set, id)
+  end
+
+  defp assign_multi_share_text(socket) do
+    %{shareable_events: events, share_selected: selected, share_password?: password?} =
+      socket.assigns
+
+    text =
+      events
+      |> Enum.filter(&MapSet.member?(selected, &1.id))
+      |> MultiShare.to_text(&event_url/1, include_password: password?)
+
+    assign(socket, :multi_share_text, text)
+  end
+
+  defp event_url(%Event{slug: slug}), do: RolezinhoWeb.Endpoint.url() <> "/r/" <> slug
 
   defp apply_filter(socket) do
     events = socket.assigns.events
@@ -100,6 +171,16 @@ defmodule RolezinhoWeb.HomeLive do
                friendlier signal. Logout lives on the /me page itself now,
                not on the navbar. -->
           <div class="flex shrink-0 items-center gap-1.5">
+            <button
+              :if={@shareable_events != []}
+              id="multi-share-btn"
+              type="button"
+              phx-click={BottomSheet.show("multi-share-sheet")}
+              class="grid size-11 place-items-center rounded-full bg-ink/[0.06] text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              aria-label="Compartilhar seus rolezinhos"
+            >
+              <.icon name="tabler-share" class="size-[18px]" />
+            </button>
             <.me_link current_user={@current_user} />
             <.link
               navigate={~p"/g/criar"}
@@ -212,6 +293,117 @@ defmodule RolezinhoWeb.HomeLive do
           </li>
         </ul>
       </div>
+
+      <.bottom_sheet
+        :if={@shareable_events != []}
+        id="multi-share-sheet"
+        title="Mandar seus rolezinhos"
+      >
+        <ul id="multi-share-list" class="max-h-56 space-y-1 overflow-y-auto">
+          <li :for={event <- @shareable_events}>
+            <label class="flex min-h-11 items-center gap-2.5 rounded-row px-2 py-1.5 active:bg-ink/[0.04]">
+              <input
+                id={"multi-share-event-#{event.id}"}
+                type="checkbox"
+                class={checkbox_class()}
+                phx-click="multi_share_toggle"
+                phx-value-id={event.id}
+                checked={MapSet.member?(@share_selected, event.id)}
+              />
+              <span class="min-w-0 flex-1 truncate text-[13px] font-semibold">{event.title}</span>
+              <.icon
+                :if={Event.password_protected?(event)}
+                name="tabler-lock"
+                class="size-3.5 shrink-0 text-muted"
+              />
+              <span :if={when_text(event)} class="shrink-0 text-[11px] text-muted">
+                {when_text(event)}
+              </span>
+            </label>
+          </li>
+        </ul>
+
+        <label
+          :if={@share_has_password?}
+          class="mt-3 flex items-center gap-2.5 rounded-row bg-tint px-3 py-2.5"
+        >
+          <input
+            id="multi-share-password-toggle"
+            type="checkbox"
+            class={checkbox_class()}
+            phx-click="multi_share_toggle_password"
+            checked={@share_password?}
+          />
+          <span class="text-xs font-semibold">Incluir as senhas no texto</span>
+        </label>
+
+        <.share_preview text={@multi_share_text} class="mt-3" />
+
+        <:actions>
+          <button
+            id="multi-share-copy-btn"
+            type="button"
+            phx-hook=".CopyText"
+            data-text={@multi_share_text}
+            data-copied-label="Copiado!"
+            class="flex-1 rounded-row bg-ink/[0.06] py-3 text-xs font-bold text-ink"
+          >
+            Copiar
+          </button>
+          <button
+            id="multi-share-share-btn"
+            type="button"
+            phx-hook=".ShareText"
+            data-title="Rolezinhos ativos"
+            data-text={@multi_share_text}
+            class="flex-1 rounded-row bg-ink py-3 text-xs font-bold text-ink-content"
+          >
+            Compartilhar
+          </button>
+        </:actions>
+      </.bottom_sheet>
+
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".CopyText">
+        export default {
+          mounted() {
+            this.el.addEventListener("click", async () => {
+              const done = this.el.dataset.copiedLabel || "Copiado!"
+              try {
+                await navigator.clipboard.writeText(this.el.dataset.text || "")
+                this.flash(done)
+              } catch (_) {
+                this.flash("Não deu pra copiar")
+              }
+            })
+          },
+          flash(msg) {
+            const original = this.el.innerHTML
+            this.el.innerText = msg
+            setTimeout(() => { this.el.innerHTML = original }, 1500)
+          }
+        }
+      </script>
+
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".ShareText">
+        export default {
+          mounted() {
+            this.el.addEventListener("click", async () => {
+              const title = this.el.dataset.title || "Rolezinho"
+              const text = this.el.dataset.text || ""
+              if (navigator.share) {
+                try { await navigator.share({ title, text }) } catch (_) {}
+              } else {
+                try {
+                  await navigator.clipboard.writeText(text)
+                  const original = this.el.innerHTML
+                  this.el.innerText = "Copiado!"
+                  setTimeout(() => { this.el.innerHTML = original }, 1500)
+                } catch (_) {}
+              }
+            })
+          }
+        }
+      </script>
 
       <script :type={Phoenix.LiveView.ColocatedHook} name=".RecentEvents">
         const KEY = "rolezinho:recent"

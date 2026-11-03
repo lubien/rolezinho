@@ -117,6 +117,24 @@ defmodule Rolezinho.Events do
     open ++ extra_mine
   end
 
+  @doc """
+  Lists the events a signed-in user can bundle into a multi-share message:
+  everything they created that isn't `:done`, hidden and grouped ones
+  included — the owner picks what goes out. Ordered like the home page.
+
+  `nil` in and you get `[]`.
+  """
+  @spec list_shareable_for(integer() | nil) :: [Event.t()]
+  def list_shareable_for(nil), do: []
+
+  def list_shareable_for(user_id) when is_integer(user_id) do
+    from(e in Event,
+      where: e.created_by_user_id == ^user_id and e.status != :done,
+      order_by: [asc_nulls_last: e.starts_at, asc: e.title]
+    )
+    |> Repo.all()
+  end
+
   @doc "Lists strictly active events."
   def list_active, do: do_list(:active)
 

@@ -221,6 +221,10 @@ defmodule Rolezinho.Event do
   @doc "Statuses reachable by anonymous visitors with the slug."
   def public_statuses, do: @public_statuses
 
+  @doc "The short label for the `:maybe` status."
+  @spec maybe_status_label() :: String.t()
+  def maybe_status_label, do: "Averiguando Resenha"
+
   @doc """
   The one-liner explaining the `:maybe` status to viewers.
 
