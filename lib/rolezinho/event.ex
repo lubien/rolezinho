@@ -13,7 +13,9 @@ defmodule Rolezinho.Event do
 
   alias Rolezinho.Event
   alias Rolezinho.Event.Attendee
+  alias Rolezinho.Event.Cash
   alias Rolezinho.Event.FormField
+  alias Rolezinho.Event.Settlement
 
   # `:maybe` ("averiguando resenha") is the tentative state: the event
   # might happen, depending on how many people opt in — signup is open,
@@ -399,13 +401,15 @@ defmodule Rolezinho.Event do
         parts
       end
 
+    hide_names? = Keyword.get(opts, :hide_names, false)
+
     parts =
-      case {hide_description?, Rolezinho.Event.Cash.amount_line_text(event)} do
+      case {hide_description?, Cash.amount_line_text(event)} do
         {false, line} when is_binary(line) -> parts ++ ["", line]
         _ -> parts
       end
 
-    hide_names? = Keyword.get(opts, :hide_names, false)
+    parts = parts ++ settlement_text(event, hide_description? or hide_names?)
 
     parts = parts ++ ["", main_list_text(event, url, hide_names?)]
 
@@ -439,7 +443,9 @@ defmodule Rolezinho.Event do
     lines =
       filled
       |> Enum.with_index(1)
-      |> Enum.map(fn {%Attendee{} = att, i} -> render_attendee_line(i, att, hide_names?) end)
+      |> Enum.map(fn {%Attendee{} = att, i} ->
+        render_attendee_line(i, att, hide_names?, contribution_suffix(event, att, hide_names?))
+      end)
 
     lines =
       if free > 0 and not locked_signups?(event) do
@@ -845,6 +851,7 @@ defmodule Rolezinho.Event do
     %{
       name: attendee.name,
       paid: attendee.paid,
+      contributed_cents: attendee.contributed_cents,
       participant_id: attendee.participant_id,
       user_id: attendee.user_id,
       joined_at: attendee.joined_at,
@@ -875,15 +882,50 @@ defmodule Rolezinho.Event do
   @doc "Placeholder used when attendee names must be hidden (locked view)."
   def hidden_name_placeholder, do: @hidden_name_placeholder
 
-  defp render_attendee_line(i, att, hide_names? \\ false)
+  defp render_attendee_line(i, att, hide_names? \\ false, suffix \\ "")
 
-  defp render_attendee_line(i, %Attendee{name: "", paid: _}, _hide?), do: "#{i}- "
+  defp render_attendee_line(i, %Attendee{name: "", paid: _}, _hide?, _suffix), do: "#{i}- "
 
-  defp render_attendee_line(i, %Attendee{name: name, paid: paid}, hide?) do
+  defp render_attendee_line(i, %Attendee{name: name, paid: paid}, hide?, suffix) do
     display = if hide?, do: @hidden_name_placeholder, else: name
     mark = if paid, do: " ✅", else: ""
-    "#{i}- #{display}#{mark}"
+    "#{i}- #{display}#{suffix}#{mark}"
   end
+
+  # "Dividir no final": who sends what to whom, one line per sender, with the
+  # sender's ✅ once they say they sent it. Left out whenever names are, since
+  # the plan is nothing but names.
+  defp settlement_text(%Event{split_method: :settle_up} = event, false = _hidden?) do
+    case Settlement.by_sender(Settlement.plan(event)) do
+      [] ->
+        []
+
+      groups ->
+        lines =
+          Enum.map(groups, fn {sender, transfers} ->
+            amounts =
+              Enum.map_join(transfers, " e ", fn transfer ->
+                "#{Cash.format_amount(transfer.cents)} para #{transfer.to.name}"
+              end)
+
+            "#{sender.name} manda #{amounts}" <> if(sender.paid, do: " ✅", else: "")
+          end)
+
+        ["", "Plano de pagamento" | lines]
+    end
+  end
+
+  defp settlement_text(%Event{}, _hidden?), do: []
+
+  defp contribution_suffix(
+         %Event{split_method: :settle_up},
+         %Attendee{contributed_cents: cents},
+         false = _hide_names?
+       )
+       when is_integer(cents) and cents > 0,
+       do: " (pagou #{Cash.format_amount(cents)})"
+
+  defp contribution_suffix(%Event{}, %Attendee{}, _hide_names?), do: ""
 
   defp compact_main(list) do
     Enum.reject(list, fn %Attendee{name: n} -> String.trim(n) == "" end)
@@ -913,6 +955,13 @@ defmodule Rolezinho.Event do
       end)
 
     new
+  end
+
+  @doc "Records what the main-list attendee at `index` (1-based) spent, in cents."
+  @spec set_contribution(t(), pos_integer(), non_neg_integer()) :: t()
+  def set_contribution(%Event{} = event, index, cents) when is_integer(cents) and cents >= 0 do
+    list = update_at(event.main_list, index - 1, fn att -> %{att | contributed_cents: cents} end)
+    %{event | main_list: list}
   end
 
   defp update_at(list, index, fun) do

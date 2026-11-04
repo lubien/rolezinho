@@ -1263,6 +1263,39 @@ defmodule Rolezinho.Events do
     |> Enum.map(fn {canonical, _joined_at} -> canonical end)
   end
 
+  @doc """
+  Records what the main-list attendee at `index` spent, for "Dividir no final".
+
+  `amount` is what the visitor typed ("200", "R$ 32,50"); blank clears it to
+  zero. Bounded so a typo (or a hostile POST) can't turn the plan into
+  nonsense. The caller checks who may write the row — the same rule as the
+  paid check (`Policy.can_toggle_paid?/3`).
+  """
+  @spec set_contribution(Event.t(), pos_integer(), String.t() | nil) ::
+          {:ok, Event.t()} | {:error, :invalid_amount | map()}
+  def set_contribution(%Event{} = event, index, amount) do
+    case parse_contribution(amount) do
+      {:ok, cents} -> save(Event.set_contribution(event, index, cents))
+      :error -> {:error, :invalid_amount}
+    end
+  end
+
+  defp parse_contribution(amount) when amount in [nil, ""], do: {:ok, 0}
+
+  defp parse_contribution(amount) when is_binary(amount) do
+    max = max_contribution_cents()
+
+    case parse_price(amount) do
+      cents when is_integer(cents) and cents <= max -> {:ok, cents}
+      _ -> :error
+    end
+  end
+
+  defp parse_contribution(_), do: :error
+
+  # R$ 100.000 — far above any rolê, low enough to keep the numbers sane.
+  defp max_contribution_cents, do: 10_000_000
+
   def remove_main(%Event{} = event, index), do: save(Event.remove_main(event, index))
   def remove_wait(%Event{} = event, index), do: save(Event.remove_wait(event, index))
   def toggle_paid_main(%Event{} = event, index), do: save(Event.toggle_paid_main(event, index))

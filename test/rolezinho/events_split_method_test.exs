@@ -74,4 +74,28 @@ defmodule Rolezinho.EventsSplitMethodTest do
       refute Event.to_text(create(%{})) =~ "por pessoa"
     end
   end
+
+  describe "set_contribution/3" do
+    setup do
+      event = create(%{"split_method" => "settle_up"})
+      {:ok, event, _} = Events.add_party(event, "Ana", 1, participant_id: "tok")
+      %{event: event}
+    end
+
+    test "parses what the visitor typed", %{event: event} do
+      {:ok, event} = Events.set_contribution(event, 1, "R$ 32,50")
+      assert hd(event.main_list).contributed_cents == 3250
+    end
+
+    test "blank clears to zero", %{event: event} do
+      {:ok, event} = Events.set_contribution(event, 1, "200")
+      {:ok, event} = Events.set_contribution(event, 1, "")
+      assert hd(event.main_list).contributed_cents == 0
+    end
+
+    test "rejects garbage and absurd amounts", %{event: event} do
+      assert {:error, :invalid_amount} = Events.set_contribution(event, 1, "muito")
+      assert {:error, :invalid_amount} = Events.set_contribution(event, 1, "100001")
+    end
+  end
 end

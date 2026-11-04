@@ -11,6 +11,7 @@ defmodule RolezinhoWeb.EventLive do
   alias Rolezinho.Event.FormField
   alias Rolezinho.Event.Meta
   alias Rolezinho.Event.Policy
+  alias Rolezinho.Event.Settlement
   alias Rolezinho.Event.WhatsMarkup
   alias Rolezinho.Events
   alias Rolezinho.Group
@@ -237,6 +238,31 @@ defmodule RolezinhoWeb.EventLive do
     |> assign(:mine_index, own_row_index(event, participant_id, user_id))
     |> assign_cash(event, organizer?)
     |> assign_join_availability(event, participant_id, organizer?, unlocked?)
+    |> assign_settlement(event, unlocked?)
+  end
+
+  # "Dividir no final": the plan, and which rows this viewer may fill in —
+  # their own, or every row for the organizer (the paid-check rule, RN-12/13).
+  # Only once unlocked, since the plan is nothing but names.
+  defp assign_settlement(socket, %Event{split_method: :settle_up} = event, true = _unlocked?) do
+    plan = Settlement.plan(event)
+    opts = socket.assigns.policy_opts
+
+    editable =
+      for person <- plan.people,
+          Policy.can_toggle_paid?(event, Enum.at(event.main_list, person.index - 1), opts),
+          into: MapSet.new(),
+          do: person.index
+
+    socket
+    |> assign(:settlement, plan)
+    |> assign(:settlement_editable, editable)
+  end
+
+  defp assign_settlement(socket, %Event{}, _unlocked?) do
+    socket
+    |> assign(:settlement, nil)
+    |> assign(:settlement_editable, MapSet.new())
   end
 
   defp created_by_current_user?(%Event{created_by_user_id: same}, %{
@@ -886,6 +912,20 @@ defmodule RolezinhoWeb.EventLive do
   # RN-12/RN-13: the organizer marks anyone; a participant marks only their own
   # row. The check is here rather than in the template because the button being
   # absent does not stop the message from arriving.
+  # Same rule as the paid check, re-checked here because the form being
+  # absent does not stop the message from arriving.
+  def handle_event("set_contribution", %{"index" => index, "amount" => amount}, socket) do
+    case socket.assigns.event do
+      %Event{split_method: :settle_up} ->
+        authorize_row(socket, :main, index, &Policy.can_toggle_paid?/3, fn event, position ->
+          Events.set_contribution(event, position, amount)
+        end)
+
+      %Event{} ->
+        {:noreply, socket}
+    end
+  end
+
   def handle_event("toggle_paid_main", %{"index" => index}, socket) do
     authorize_row(socket, :main, index, &Policy.can_toggle_paid?/3, fn event, position ->
       Events.toggle_paid_main(event, position)
@@ -1312,8 +1352,10 @@ defmodule RolezinhoWeb.EventLive do
             slug={@event.slug}
             google_calendar_url={@google_calendar_url}
             pix={@pix}
-            amount={Cash.amount_line_text(@event)}
+            amount={if(@event.split_method != :settle_up, do: Cash.amount_line_text(@event))}
           />
+
+          <.settlement_card :if={@settlement} plan={@settlement} editable={@settlement_editable} />
 
           <!-- The organizer's own words, in a card of their own. Loose under the
                details it read as a stray paragraph belonging to nothing; labelled,

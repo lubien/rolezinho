@@ -15,6 +15,7 @@ defmodule Rolezinho.Event.Cash do
 
   alias Rolezinho.Event
   alias Rolezinho.Event.Attendee
+  alias Rolezinho.Event.Settlement
 
   @type summary :: %{
           per_person_cents: non_neg_integer() | nil,
@@ -45,6 +46,27 @@ defmodule Rolezinho.Event.Cash do
       ["Roberta", "Henrique"]
   """
   @spec summary(Event.t()) :: summary()
+  def summary(%Event{split_method: :settle_up} = event) do
+    # Debtors are the people the plan has sending money; "paid" on them means
+    # they say they sent their part. Creditors are owed, not owing.
+    plan = Settlement.plan(event)
+    debtors = Enum.filter(plan.people, &(&1.balance_cents < 0))
+    {paid, unpaid} = Enum.split_with(debtors, & &1.paid)
+    owed = fn people -> Enum.reduce(people, 0, &(&2 - &1.balance_cents)) end
+
+    %{
+      per_person_cents: nil,
+      expected_cents: owed.(debtors),
+      received_cents: owed.(paid),
+      missing_cents: owed.(unpaid),
+      empty_seats: 0,
+      empty_seats_cents: 0,
+      debtors: Enum.map(unpaid, & &1.name),
+      paid_count: length(paid),
+      total_count: length(debtors)
+    }
+  end
+
   def summary(%Event{} = event) do
     attendees = filled(event.main_list)
     price = per_person_cents(event) || 0
@@ -73,6 +95,8 @@ defmodule Rolezinho.Event.Cash do
     * `:total_split` — the total divided by who is on the list, rounded up
       to the cent so the organizer never ends up short; `nil` while the list
       is empty, since there is nobody to divide by.
+    * `:settle_up` — always `nil`: there is no price, and the money goes to
+      whoever spent it rather than to the organizer's Pix.
   """
   @spec per_person_cents(Event.t()) :: non_neg_integer() | nil
   def per_person_cents(%Event{split_method: :total_split, total_cents: total} = event)
@@ -109,6 +133,17 @@ defmodule Rolezinho.Event.Cash do
     case per_person_cents(event) do
       nil -> "Total #{format_amount(total)}"
       cents -> "Total #{format_amount(total)} · #{format_amount(cents)} por pessoa"
+    end
+  end
+
+  def amount_line_text(%Event{split_method: :settle_up} = event) do
+    case Settlement.plan(event) do
+      %{total_cents: 0} ->
+        Event.split_method_label(:settle_up)
+
+      %{total_cents: total, share_cents: share} ->
+        "#{Event.split_method_label(:settle_up)} · Total #{format_amount(total)} · " <>
+          "#{format_amount(share)} por pessoa"
     end
   end
 
@@ -193,6 +228,10 @@ defmodule Rolezinho.Event.Cash do
       remainder -> "R$ #{reais},#{String.pad_leading(to_string(remainder), 2, "0")}"
     end
   end
+
+  # Under `:settle_up` people pay each other, so the organizer's Pix would
+  # point the reminder at the wrong person.
+  defp amount_line(%Event{split_method: :settle_up}), do: nil
 
   defp amount_line(%Event{pix_key: key} = event) do
     parts =
