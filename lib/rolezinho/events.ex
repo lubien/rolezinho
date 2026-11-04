@@ -310,7 +310,9 @@ defmodule Rolezinho.Events do
          local: trimmed(params, "local"),
          starts_at: parse_datetime(params["starts_at"]) || combine_date_time(params),
          ends_at: parse_datetime(params["ends_at"]),
+         split_method: parse_split_method(params["split_method"]),
          price_cents: parse_price(params["price"]),
+         total_cents: parse_price(params["total"]),
          pix_key: pix_key,
          pix_key_type: pix_key_type
        }}
@@ -424,6 +426,17 @@ defmodule Rolezinho.Events do
 
   defp parse_price(_), do: nil
 
+  # Known strings to known atoms; anything else falls back to the default
+  # rather than building an atom from user input.
+  defp parse_split_method(method)
+       when method in [:total_split, :per_person, :per_seat, :settle_up],
+       do: method
+
+  defp parse_split_method("total_split"), do: :total_split
+  defp parse_split_method("per_seat"), do: :per_seat
+  defp parse_split_method("settle_up"), do: :settle_up
+  defp parse_split_method(_), do: :per_person
+
   defp pad_cents(cents) do
     cents |> String.pad_trailing(2, "0") |> String.to_integer()
   end
@@ -496,7 +509,9 @@ defmodule Rolezinho.Events do
       local: attrs.local,
       starts_at: attrs.starts_at,
       ends_at: attrs.ends_at,
+      split_method: attrs.split_method,
       price_cents: attrs.price_cents,
+      total_cents: attrs.total_cents,
       pix_key: attrs.pix_key,
       pix_key_type: attrs.pix_key_type
     }
@@ -871,7 +886,9 @@ defmodule Rolezinho.Events do
         starts_at: combine_date_time(params),
         category: trimmed(params, "category"),
         password: params |> Map.get("password", "") |> to_string(),
+        split_method: parse_split_method(Map.get(params, "split_method", event.split_method)),
         price_cents: parse_price(params["price"]),
+        total_cents: parse_price(Map.get(params, "total", event.total_cents)),
         pix_key: pix_key,
         pix_key_type: pix_key_type
       }
@@ -967,7 +984,9 @@ defmodule Rolezinho.Events do
 
     if errors == %{} do
       attrs = %{
+        split_method: parse_split_method(Map.get(params, "split_method", event.split_method)),
         price_cents: parse_price(params["price"]),
+        total_cents: parse_price(Map.get(params, "total", event.total_cents)),
         pix_key: pix_key,
         pix_key_type: pix_key_type
       }

@@ -147,7 +147,9 @@ defmodule RolezinhoWeb.EventEditLive do
       "local" => meta.local || "",
       "date" => (meta.date && Date.to_iso8601(meta.date)) || "",
       "time" => (meta.time && Calendar.strftime(meta.time, "%H:%M")) || "",
+      "split_method" => Atom.to_string(event.split_method),
       "price" => price_input_value(event.price_cents),
+      "total" => price_input_value(event.total_cents),
       "pix_key" => event.pix_key || "",
       "pix_key_type" => event.pix_key_type && Atom.to_string(event.pix_key_type),
       "password" => event.password || ""
@@ -525,11 +527,7 @@ defmodule RolezinhoWeb.EventEditLive do
             <.input field={@details_form[:time]} type="time" label="Horário (BRT)" />
           </div>
 
-          <.input
-            field={@details_form[:price]}
-            label="Quanto cada um paga"
-            placeholder="ex.: 15"
-          />
+          <.split_method_fields form={@details_form} />
           <!--
             Mirror comment from `EventNewLive`: this is not a password. The
             four data-attrs plus `autocomplete="off"` opt out of every

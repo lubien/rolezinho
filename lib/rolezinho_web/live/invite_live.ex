@@ -59,7 +59,7 @@ defmodule RolezinhoWeb.InviteLive do
     |> assign(:filled, filled_count(event))
     |> assign(:local, if(unlocked?, do: event.local || meta.local))
     |> assign(:when_text, when_text(event, meta))
-    |> assign(:amount, Cash.format_amount(event.price_cents))
+    |> assign(:amount, Cash.format_amount(Cash.per_person_cents(event)))
     |> assign(:can_join?, can_join?(socket, event, participant_id, user_id))
     |> assign(:party_room, party_room(event))
     |> assign(:extra_fields, extra_fields(event))

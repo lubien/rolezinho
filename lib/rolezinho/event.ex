@@ -31,6 +31,7 @@ defmodule Rolezinho.Event do
   # Statuses that appear on the public home page (still subject to the
   # `hidden` flag applied at the query layer in `Rolezinho.Events`).
   @open_statuses [:active, :maybe, :payments_only]
+  @split_methods [:total_split, :per_person, :per_seat, :settle_up]
 
   # Statuses reachable by direct slug for anonymous visitors. Hidden events
   # remain reachable by slug — that's the whole point of being unlisted-
@@ -63,7 +64,13 @@ defmodule Rolezinho.Event do
     field :local, :string
     field :starts_at, :utc_datetime
     field :ends_at, :utc_datetime
+    # How the cost is split. `price_cents` is the per-seat price for
+    # `:per_person` / `:per_seat`; `total_cents` is the whole bill for
+    # `:total_split`; `:settle_up` uses neither — each attendee records what
+    # they spent (`Attendee.contributed_cents`). See `Rolezinho.Event.Cash`.
+    field :split_method, Ecto.Enum, values: @split_methods, default: :per_person
     field :price_cents, :integer
+    field :total_cents, :integer
     field :pix_key, :string
 
     # Which of the five DICT key types the `pix_key` above is. The organizer
@@ -98,6 +105,7 @@ defmodule Rolezinho.Event do
   end
 
   @type status :: :active | :maybe | :payments_only | :done
+  @type split_method :: :total_split | :per_person | :per_seat | :settle_up
 
   @type t :: %__MODULE__{
           id: integer() | nil,
@@ -117,7 +125,9 @@ defmodule Rolezinho.Event do
           local: String.t() | nil,
           starts_at: DateTime.t() | nil,
           ends_at: DateTime.t() | nil,
+          split_method: split_method(),
           price_cents: non_neg_integer() | nil,
+          total_cents: non_neg_integer() | nil,
           pix_key: String.t() | nil,
           pix_key_type: :phone | :cpf | :cnpj | :email | :random | nil,
           organizer_token: String.t() | nil,
@@ -147,7 +157,9 @@ defmodule Rolezinho.Event do
       :local,
       :starts_at,
       :ends_at,
+      :split_method,
       :price_cents,
+      :total_cents,
       :pix_key,
       :pix_key_type
     ])
@@ -168,6 +180,7 @@ defmodule Rolezinho.Event do
     |> validate_length(:category, max: 40)
     |> validate_length(:pix_key, max: 100)
     |> validate_number(:price_cents, greater_than_or_equal_to: 0)
+    |> validate_number(:total_cents, greater_than_or_equal_to: 0)
     |> validate_ends_after_starts()
     |> unique_constraint(:slug, message: "já está em uso")
   end
@@ -211,6 +224,16 @@ defmodule Rolezinho.Event do
       changeset
     end
   end
+
+  @doc "Valid values for the `split_method` enum, in the order the form lists them."
+  def split_methods, do: @split_methods
+
+  @doc "The label for a `split_method` — what the form and the shared text call it."
+  @spec split_method_label(split_method()) :: String.t()
+  def split_method_label(:total_split), do: "Dividir automaticamente total"
+  def split_method_label(:per_person), do: "Preço por participante"
+  def split_method_label(:per_seat), do: "Preço por participante (inclui vazios)"
+  def split_method_label(:settle_up), do: "Dividir no final"
 
   @doc "Valid values for the `status` enum."
   def statuses, do: @statuses
@@ -332,6 +355,9 @@ defmodule Rolezinho.Event do
 
   Payments-only events omit the vagas/espera summary lines automatically, since
   in that mode signups are closed.
+
+  The payment line (`Rolezinho.Event.Cash.amount_line_text/1`) follows the
+  header, and is omitted together with it under `:hide_description`.
   """
   @spec to_text(t(), String.t() | nil, keyword()) :: String.t()
   def to_text(%Event{} = event, url \\ nil, opts \\ []) do
@@ -371,6 +397,12 @@ defmodule Rolezinho.Event do
         parts ++ ["", header]
       else
         parts
+      end
+
+    parts =
+      case {hide_description?, Rolezinho.Event.Cash.amount_line_text(event)} do
+        {false, line} when is_binary(line) -> parts ++ ["", line]
+        _ -> parts
       end
 
     hide_names? = Keyword.get(opts, :hide_names, false)
@@ -790,7 +822,9 @@ defmodule Rolezinho.Event do
       local: event.local,
       starts_at: event.starts_at,
       ends_at: event.ends_at,
+      split_method: event.split_method,
       price_cents: event.price_cents,
+      total_cents: event.total_cents,
       pix_key: event.pix_key,
       pix_key_type: event.pix_key_type,
       main_list: Enum.map(event.main_list, &attendee_to_map/1),

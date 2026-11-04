@@ -52,7 +52,9 @@ defmodule RolezinhoWeb.EventNewLive do
       "category" => "",
       "date" => "",
       "time" => "",
+      "split_method" => "per_person",
       "price" => "",
+      "total" => "",
       "pix_key" => "",
       "description" => "",
       "main_size" => "18",
@@ -250,7 +252,7 @@ defmodule RolezinhoWeb.EventNewLive do
             </p>
 
             <div class="mt-3.5 space-y-3">
-              <.input field={@form[:price]} label="Quanto cada um paga" placeholder="ex.: 15" />
+              <.split_method_fields form={@form} />
               <!--
                 Password managers keep misidentifying this field as a
                 password because it sits near the "Senha" section and holds

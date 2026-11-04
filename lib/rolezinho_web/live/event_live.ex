@@ -385,26 +385,32 @@ defmodule RolezinhoWeb.EventLive do
   defp remove_confirm(true, _name), do: "Sair da lista?"
   defp remove_confirm(false, name), do: "Remover #{name} da lista?"
 
-  defp debt_summary(%{debtors: [_one], missing_cents: missing}) do
-    "Falta #{Cash.format_amount(missing)} · 1 pessoa não pagou o Pix."
+  defp debt_summary(%{missing_cents: missing} = cash) do
+    "Falta#{if missing_plural?(cash), do: "m"} #{Cash.format_amount(missing)}" <>
+      debtors_part(cash) <> empty_seats_part(cash) <> "."
   end
 
-  defp debt_summary(%{debtors: debtors, missing_cents: missing}) do
-    "Faltam #{Cash.format_amount(missing)} · #{length(debtors)} pessoas não pagaram o Pix."
-  end
+  defp missing_plural?(%{debtors: debtors, empty_seats: seats}), do: length(debtors) + seats > 1
+
+  defp debtors_part(%{debtors: []}), do: ""
+  defp debtors_part(%{debtors: [_one]}), do: " · 1 pessoa não pagou o Pix"
+  defp debtors_part(%{debtors: debtors}), do: " · #{length(debtors)} pessoas não pagaram o Pix"
+
+  defp empty_seats_part(%{empty_seats: 0}), do: ""
+
+  defp empty_seats_part(%{empty_seats: seats, empty_seats_cents: cents}),
+    do:
+      " · #{seats} #{if seats == 1, do: "vaga vazia", else: "vagas vazias"} (#{Cash.format_amount(cents)})"
 
   # How many of the people on the list have declared payment. Returns nil when
   # there is nothing to count — an empty list, or a free event where the check
   # would be reporting on money nobody owes.
-  defp paid_summary(%Event{price_cents: cents}) when is_nil(cents) or cents == 0, do: nil
-
-  defp paid_summary(%Event{main_list: list}) do
-    people = Enum.filter(list, &(String.trim(&1.name) != ""))
-
-    case {Enum.count(people, & &1.paid), length(people)} do
-      {_paid, 0} -> nil
-      {paid, total} when paid == total -> "todos pagaram"
-      {paid, total} -> "#{paid} de #{total} já pagaram"
+  defp paid_summary(%Event{} = event) do
+    case {Cash.per_person_cents(event), Cash.summary(event)} do
+      {nil, _} -> nil
+      {_, %{total_count: 0}} -> nil
+      {_, %{paid_count: paid, total_count: paid}} -> "todos pagaram"
+      {_, %{paid_count: paid, total_count: total}} -> "#{paid} de #{total} já pagaram"
     end
   end
 
@@ -1306,7 +1312,7 @@ defmodule RolezinhoWeb.EventLive do
             slug={@event.slug}
             google_calendar_url={@google_calendar_url}
             pix={@pix}
-            amount={Cash.format_amount(@event.price_cents)}
+            amount={Cash.amount_line_text(@event)}
           />
 
           <!-- The organizer's own words, in a card of their own. Loose under the
