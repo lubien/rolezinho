@@ -83,19 +83,50 @@ defmodule Rolezinho.EventsSplitMethodTest do
     end
 
     test "parses what the visitor typed", %{event: event} do
-      {:ok, event} = Events.set_contribution(event, 1, "R$ 32,50")
+      {:ok, event} = Events.set_contribution(event, 1, %{"amount" => "R$ 32,50"})
       assert hd(event.main_list).contributed_cents == 3250
     end
 
     test "blank clears to zero", %{event: event} do
-      {:ok, event} = Events.set_contribution(event, 1, "200")
-      {:ok, event} = Events.set_contribution(event, 1, "")
+      {:ok, event} = Events.set_contribution(event, 1, %{"amount" => "200"})
+      {:ok, event} = Events.set_contribution(event, 1, %{"amount" => ""})
       assert hd(event.main_list).contributed_cents == 0
     end
 
     test "rejects garbage and absurd amounts", %{event: event} do
-      assert {:error, :invalid_amount} = Events.set_contribution(event, 1, "muito")
-      assert {:error, :invalid_amount} = Events.set_contribution(event, 1, "100001")
+      assert {:error, :invalid_amount} = Events.set_contribution(event, 1, %{"amount" => "muito"})
+
+      assert {:error, :invalid_amount} =
+               Events.set_contribution(event, 1, %{"amount" => "100001"})
+    end
+
+    test "stores the Pix key as typed", %{event: event} do
+      {:ok, event} =
+        Events.set_contribution(event, 1, %{"amount" => "200", "pix_key" => " (91) 98493-3238 "})
+
+      assert hd(event.main_list).pix_key == "(91) 98493-3238"
+    end
+
+    test "keeps the Pix key when the params leave it out, clears it when blank", %{event: event} do
+      {:ok, event} =
+        Events.set_contribution(event, 1, %{"amount" => "200", "pix_key" => "ana@x.com"})
+
+      {:ok, event} = Events.set_contribution(event, 1, %{"amount" => "250"})
+      assert hd(event.main_list).pix_key == "ana@x.com"
+
+      {:ok, event} = Events.set_contribution(event, 1, %{"amount" => "250", "pix_key" => ""})
+      assert hd(event.main_list).pix_key == nil
+    end
+
+    test "rejects something that isn't a Pix key", %{event: event} do
+      assert {:error, :invalid_pix_key} =
+               Events.set_contribution(event, 1, %{"amount" => "200", "pix_key" => "não sei"})
+
+      assert {:error, :invalid_pix_key} =
+               Events.set_contribution(event, 1, %{
+                 "amount" => "200",
+                 "pix_key" => String.duplicate("a", 95) <> "@x.com"
+               })
     end
   end
 end

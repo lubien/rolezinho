@@ -98,4 +98,20 @@ defmodule RolezinhoWeb.SettleUpTest do
     refute has_element?(view, "#settlement")
     refute html =~ "Plano de pagamento"
   end
+
+  test "the Pix field appears once someone spent, and receivers show their key", %{conn: conn} do
+    event = create_event()
+    {:ok, view, _html} = live(participant_conn(conn, "tok-ana", event.slug), ~p"/r/#{event.slug}")
+
+    refute has_element?(view, "#contribution-pix-1")
+
+    view |> form("#contribution-form-1", %{amount: "200"}) |> render_submit()
+    assert has_element?(view, "#contribution-pix-1")
+
+    view
+    |> form("#contribution-form-1", %{amount: "200", pix_key: "ana@exemplo.com"})
+    |> render_submit()
+
+    assert has_element?(view, "#settlement-copy-pix-1[data-text='ana@exemplo.com']")
+  end
 end

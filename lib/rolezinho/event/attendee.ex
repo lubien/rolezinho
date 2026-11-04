@@ -28,6 +28,10 @@ defmodule Rolezinho.Event.Attendee do
     # What this person spent on the rolê, for the "Dividir no final" split
     # method (`Rolezinho.Event.Settlement`). Ignored by every other method.
     field :contributed_cents, :integer, default: 0
+    # Where this person wants to receive their money back under "Dividir no
+    # final". Kept as typed: canonicalizing would guess, and a bare 11-digit
+    # phone would come back as a CPF (see `Rolezinho.Pix.display_as/2`).
+    field :pix_key, :string
 
     field :participant_id, :string
     field :user_id, :integer
@@ -45,6 +49,7 @@ defmodule Rolezinho.Event.Attendee do
           name: String.t(),
           paid: boolean(),
           contributed_cents: non_neg_integer(),
+          pix_key: String.t() | nil,
           participant_id: String.t() | nil,
           user_id: integer() | nil,
           joined_at: DateTime.t() | nil,
@@ -57,6 +62,7 @@ defmodule Rolezinho.Event.Attendee do
       :name,
       :paid,
       :contributed_cents,
+      :pix_key,
       :participant_id,
       :user_id,
       :joined_at,
@@ -64,6 +70,7 @@ defmodule Rolezinho.Event.Attendee do
     ])
     |> validate_length(:name, max: 60)
     |> validate_number(:contributed_cents, greater_than_or_equal_to: 0)
+    |> validate_length(:pix_key, max: 100)
   end
 
   @doc """

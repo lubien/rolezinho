@@ -21,7 +21,7 @@ defmodule Storybook.UI.SettlementCard do
         id: :two_payers,
         description:
           "Ana spent R$ 200 and Bruno R$ 120; 8 others nothing. R$ 32 each. Hugo splits his " <>
-            "part across both. Carla, Davi and Iris have sent theirs.",
+            "part across both. Carla, Davi and Iris have sent theirs. Ana left a Pix key.",
         attributes: %{plan: plan(two_payers()), editable: MapSet.new([5])}
       },
       %Variation{

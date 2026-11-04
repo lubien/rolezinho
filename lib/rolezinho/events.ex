@@ -1264,19 +1264,45 @@ defmodule Rolezinho.Events do
   end
 
   @doc """
-  Records what the main-list attendee at `index` spent, for "Dividir no final".
+  Records what the main-list attendee at `index` spent, and where they want to
+  be paid back, for "Dividir no final".
 
-  `amount` is what the visitor typed ("200", "R$ 32,50"); blank clears it to
-  zero. Bounded so a typo (or a hostile POST) can't turn the plan into
-  nonsense. The caller checks who may write the row — the same rule as the
-  paid check (`Policy.can_toggle_paid?/3`).
+  Params (string keys, as the form sends them):
+
+    * `"amount"` — what the visitor typed ("200", "R$ 32,50"); blank clears it
+      to zero. Bounded so a typo (or a hostile POST) can't turn the plan into
+      nonsense.
+    * `"pix_key"` — optional; blank clears it. Stored as typed, but it has to
+      have the shape of a Pix key (`Rolezinho.Pix.classify/1`). When the key
+      is absent from the params, the stored one is kept.
+
+  The caller checks who may write the row — the same rule as the paid check
+  (`Policy.can_toggle_paid?/3`).
   """
-  @spec set_contribution(Event.t(), pos_integer(), String.t() | nil) ::
-          {:ok, Event.t()} | {:error, :invalid_amount | map()}
-  def set_contribution(%Event{} = event, index, amount) do
-    case parse_contribution(amount) do
-      {:ok, cents} -> save(Event.set_contribution(event, index, cents))
-      :error -> {:error, :invalid_amount}
+  @spec set_contribution(Event.t(), pos_integer(), map()) ::
+          {:ok, Event.t()} | {:error, :invalid_amount | :invalid_pix_key | map()}
+  def set_contribution(%Event{} = event, index, params) when is_map(params) do
+    current = Enum.at(event.main_list, index - 1)
+
+    with {:ok, cents} <- parse_contribution(params["amount"]),
+         {:ok, pix_key} <-
+           parse_payout_pix(Map.get(params, "pix_key", current && current.pix_key)) do
+      save(Event.set_contribution(event, index, cents, pix_key))
+    end
+  end
+
+  defp parse_payout_pix(nil), do: {:ok, nil}
+
+  defp parse_payout_pix(key) when is_binary(key), do: key |> String.trim() |> check_payout_pix()
+
+  defp parse_payout_pix(_), do: {:error, :invalid_pix_key}
+
+  defp check_payout_pix(""), do: {:ok, nil}
+
+  defp check_payout_pix(key) do
+    case {String.length(key) <= 100, Pix.classify(key)} do
+      {true, {:ok, _type, _canonical}} -> {:ok, key}
+      _ -> {:error, :invalid_pix_key}
     end
   end
 
@@ -1287,11 +1313,11 @@ defmodule Rolezinho.Events do
 
     case parse_price(amount) do
       cents when is_integer(cents) and cents <= max -> {:ok, cents}
-      _ -> :error
+      _ -> {:error, :invalid_amount}
     end
   end
 
-  defp parse_contribution(_), do: :error
+  defp parse_contribution(_), do: {:error, :invalid_amount}
 
   # R$ 100.000 — far above any rolê, low enough to keep the numbers sane.
   defp max_contribution_cents, do: 10_000_000

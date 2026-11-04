@@ -62,4 +62,18 @@ defmodule Rolezinho.Event.SettleUpTextTest do
 
     refute reminder =~ "91984933238"
   end
+
+  test "lists each receiver's Pix key once, after the plan" do
+    [ana, bruno | rest] = event().main_list
+    event = %{event() | main_list: [%{ana | pix_key: "ana@exemplo.com"}, bruno | rest]}
+
+    text = Event.to_text(event)
+
+    assert text =~ "João manda R$ 32 para Bruno ✅\n\nPix de quem recebe\nAna: ana@exemplo.com\n"
+    refute text =~ "Bruno: "
+  end
+
+  test "no Pix block when no receiver has a key" do
+    refute Event.to_text(event()) =~ "Pix de quem recebe"
+  end
 end

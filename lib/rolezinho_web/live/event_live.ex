@@ -914,11 +914,11 @@ defmodule RolezinhoWeb.EventLive do
   # absent does not stop the message from arriving.
   # Same rule as the paid check, re-checked here because the form being
   # absent does not stop the message from arriving.
-  def handle_event("set_contribution", %{"index" => index, "amount" => amount}, socket) do
+  def handle_event("set_contribution", %{"index" => index} = params, socket) do
     case socket.assigns.event do
       %Event{split_method: :settle_up} ->
         authorize_row(socket, :main, index, &Policy.can_toggle_paid?/3, fn event, position ->
-          Events.set_contribution(event, position, amount)
+          Events.set_contribution(event, position, Map.take(params, ["amount", "pix_key"]))
         end)
 
       %Event{} ->

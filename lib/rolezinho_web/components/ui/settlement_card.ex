@@ -93,15 +93,29 @@ defmodule RolezinhoWeb.Components.UI.SettlementCard do
               </span>
               <.balance_pill person={person} />
             </div>
+            <div
+              :if={person.balance_cents > 0 and person.pix_key}
+              class="mt-1 flex items-center gap-2 rounded-row bg-tint px-2.5 py-1.5"
+            >
+              <span class="text-[10px] font-semibold uppercase tracking-wide text-muted">Pix</span>
+              <span class="min-w-0 flex-1 truncate font-mono text-[12px]">{person.pix_key}</span>
+              <button
+                type="button"
+                id={"#{@id}-copy-pix-#{person.index}"}
+                phx-hook=".CopyPix"
+                data-text={person.pix_key}
+                class="shrink-0 text-[12px] font-bold text-accent-ink"
+              >
+                Copiar
+              </button>
+            </div>
             <%!-- One compact row: the person's name above already says whose
-                 amount this is, so the label is for screen readers only. The
-                 button stretches to the input's height (both carry the
-                 wrapper's bottom margin). --%>
+                 amount this is, so the labels are for screen readers only. --%>
             <form
               :if={MapSet.member?(@editable, person.index)}
               id={"contribution-form-#{person.index}"}
               phx-submit="set_contribution"
-              class="mt-1.5 flex items-stretch gap-2"
+              class="mt-1.5 flex items-start gap-2"
             >
               <input type="hidden" name="index" value={person.index} />
               <div class="min-w-0 flex-1">
@@ -113,10 +127,26 @@ defmodule RolezinhoWeb.Components.UI.SettlementCard do
                   inputmode="decimal"
                   aria-label={"Quanto #{person.name} pagou"}
                 />
+                <%!-- Only someone who spent something can end up being paid
+                     back, so that is when the key is worth asking for. Not a
+                     password: the attributes keep password managers out, as
+                     on the organizer's Pix field. --%>
+                <.input
+                  :if={person.contributed_cents > 0}
+                  id={"contribution-pix-#{person.index}"}
+                  name="pix_key"
+                  value={person.pix_key || ""}
+                  placeholder="Chave Pix pra receber"
+                  aria-label={"Chave Pix de #{person.name}"}
+                  autocomplete="off"
+                  data-1p-ignore="true"
+                  data-lpignore="true"
+                  data-bwignore="true"
+                />
               </div>
               <button
                 type="submit"
-                class="mb-2 shrink-0 rounded-row bg-ink px-4 text-xs font-bold text-ink-content"
+                class="h-[38px] shrink-0 rounded-row bg-ink px-4 text-xs font-bold text-ink-content"
               >
                 Salvar
               </button>
@@ -124,6 +154,22 @@ defmodule RolezinhoWeb.Components.UI.SettlementCard do
           </li>
         </ul>
       </div>
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".CopyPix">
+        export default {
+          mounted() {
+            this.el.addEventListener("click", async () => {
+              const original = this.el.textContent
+              try {
+                await navigator.clipboard.writeText(this.el.dataset.text || "")
+                this.el.textContent = "Copiado!"
+              } catch (_) {
+                this.el.textContent = "Não deu"
+              }
+              setTimeout(() => { this.el.textContent = original }, 1500)
+            })
+          }
+        }
+      </script>
     </section>
     """
   end

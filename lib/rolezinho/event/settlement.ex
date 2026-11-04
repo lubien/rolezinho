@@ -32,6 +32,7 @@ defmodule Rolezinho.Event.Settlement do
           name: String.t(),
           paid: boolean(),
           contributed_cents: non_neg_integer(),
+          pix_key: String.t() | nil,
           share_cents: non_neg_integer(),
           balance_cents: integer()
         }
@@ -76,6 +77,7 @@ defmodule Rolezinho.Event.Settlement do
           name: attendee.name,
           paid: attendee.paid,
           contributed_cents: contributed(attendee),
+          pix_key: attendee.pix_key,
           share_cents: share,
           balance_cents: contributed(attendee) - share
         }
@@ -100,6 +102,15 @@ defmodule Rolezinho.Event.Settlement do
     |> Enum.group_by(& &1.from.index)
     |> Enum.sort_by(fn {index, _} -> index end)
     |> Enum.map(fn {_index, [first | _] = group} -> {first.from, group} end)
+  end
+
+  @doc """
+  The people the plan has receiving money, in list order — whose Pix keys a
+  payer needs.
+  """
+  @spec receivers(plan()) :: [person()]
+  def receivers(%{transfers: transfers}) do
+    transfers |> Enum.map(& &1.to) |> Enum.uniq_by(& &1.index) |> Enum.sort_by(& &1.index)
   end
 
   defp contributed(%Attendee{contributed_cents: cents}) when is_integer(cents) and cents > 0,

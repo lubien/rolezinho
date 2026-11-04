@@ -852,6 +852,7 @@ defmodule Rolezinho.Event do
       name: attendee.name,
       paid: attendee.paid,
       contributed_cents: attendee.contributed_cents,
+      pix_key: attendee.pix_key,
       participant_id: attendee.participant_id,
       user_id: attendee.user_id,
       joined_at: attendee.joined_at,
@@ -911,11 +912,20 @@ defmodule Rolezinho.Event do
             "#{sender.name} manda #{amounts}" <> if(sender.paid, do: " ✅", else: "")
           end)
 
-        ["", "Plano de pagamento" | lines]
+        ["", "Plano de pagamento" | lines] ++ receiver_pix_text(Settlement.plan(event))
     end
   end
 
   defp settlement_text(%Event{}, _hidden?), do: []
+
+  # One block with each receiver's key, rather than the key repeated on every
+  # line that pays them — five "(Pix: …)" in a row is noise in a group chat.
+  defp receiver_pix_text(plan) do
+    case Enum.filter(Settlement.receivers(plan), & &1.pix_key) do
+      [] -> []
+      receivers -> ["", "Pix de quem recebe" | Enum.map(receivers, &"#{&1.name}: #{&1.pix_key}")]
+    end
+  end
 
   defp contribution_suffix(
          %Event{split_method: :settle_up},
@@ -957,10 +967,18 @@ defmodule Rolezinho.Event do
     new
   end
 
-  @doc "Records what the main-list attendee at `index` (1-based) spent, in cents."
-  @spec set_contribution(t(), pos_integer(), non_neg_integer()) :: t()
-  def set_contribution(%Event{} = event, index, cents) when is_integer(cents) and cents >= 0 do
-    list = update_at(event.main_list, index - 1, fn att -> %{att | contributed_cents: cents} end)
+  @doc """
+  Records what the main-list attendee at `index` (1-based) spent, in cents,
+  and the Pix key they want to be paid back on (`nil` for none).
+  """
+  @spec set_contribution(t(), pos_integer(), non_neg_integer(), String.t() | nil) :: t()
+  def set_contribution(%Event{} = event, index, cents, pix_key)
+      when is_integer(cents) and cents >= 0 do
+    list =
+      update_at(event.main_list, index - 1, fn att ->
+        %{att | contributed_cents: cents, pix_key: pix_key}
+      end)
+
     %{event | main_list: list}
   end
 
