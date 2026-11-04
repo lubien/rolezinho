@@ -11,6 +11,7 @@ defmodule RolezinhoWeb.EventLive do
   alias Rolezinho.Event.FormField
   alias Rolezinho.Event.Meta
   alias Rolezinho.Event.Policy
+  alias Rolezinho.Event.Settlement
   alias Rolezinho.Event.WhatsMarkup
   alias Rolezinho.Events
   alias Rolezinho.Group
@@ -237,6 +238,31 @@ defmodule RolezinhoWeb.EventLive do
     |> assign(:mine_index, own_row_index(event, participant_id, user_id))
     |> assign_cash(event, organizer?)
     |> assign_join_availability(event, participant_id, organizer?, unlocked?)
+    |> assign_settlement(event, unlocked?)
+  end
+
+  # "Dividir no final": the plan, and which rows this viewer may fill in —
+  # their own, or every row for the organizer (the paid-check rule, RN-12/13).
+  # Only once unlocked, since the plan is nothing but names.
+  defp assign_settlement(socket, %Event{split_method: :settle_up} = event, true = _unlocked?) do
+    plan = Settlement.plan(event)
+    opts = socket.assigns.policy_opts
+
+    editable =
+      for person <- plan.people,
+          Policy.can_toggle_paid?(event, Enum.at(event.main_list, person.index - 1), opts),
+          into: MapSet.new(),
+          do: person.index
+
+    socket
+    |> assign(:settlement, plan)
+    |> assign(:settlement_editable, editable)
+  end
+
+  defp assign_settlement(socket, %Event{}, _unlocked?) do
+    socket
+    |> assign(:settlement, nil)
+    |> assign(:settlement_editable, MapSet.new())
   end
 
   defp created_by_current_user?(%Event{created_by_user_id: same}, %{
@@ -385,26 +411,32 @@ defmodule RolezinhoWeb.EventLive do
   defp remove_confirm(true, _name), do: "Sair da lista?"
   defp remove_confirm(false, name), do: "Remover #{name} da lista?"
 
-  defp debt_summary(%{debtors: [_one], missing_cents: missing}) do
-    "Falta #{Cash.format_amount(missing)} · 1 pessoa não pagou o Pix."
+  defp debt_summary(%{missing_cents: missing} = cash) do
+    "Falta#{if missing_plural?(cash), do: "m"} #{Cash.format_amount(missing)}" <>
+      debtors_part(cash) <> empty_seats_part(cash) <> "."
   end
 
-  defp debt_summary(%{debtors: debtors, missing_cents: missing}) do
-    "Faltam #{Cash.format_amount(missing)} · #{length(debtors)} pessoas não pagaram o Pix."
-  end
+  defp missing_plural?(%{debtors: debtors, empty_seats: seats}), do: length(debtors) + seats > 1
+
+  defp debtors_part(%{debtors: []}), do: ""
+  defp debtors_part(%{debtors: [_one]}), do: " · 1 pessoa não pagou o Pix"
+  defp debtors_part(%{debtors: debtors}), do: " · #{length(debtors)} pessoas não pagaram o Pix"
+
+  defp empty_seats_part(%{empty_seats: 0}), do: ""
+
+  defp empty_seats_part(%{empty_seats: seats, empty_seats_cents: cents}),
+    do:
+      " · #{seats} #{if seats == 1, do: "vaga vazia", else: "vagas vazias"} (#{Cash.format_amount(cents)})"
 
   # How many of the people on the list have declared payment. Returns nil when
   # there is nothing to count — an empty list, or a free event where the check
   # would be reporting on money nobody owes.
-  defp paid_summary(%Event{price_cents: cents}) when is_nil(cents) or cents == 0, do: nil
-
-  defp paid_summary(%Event{main_list: list}) do
-    people = Enum.filter(list, &(String.trim(&1.name) != ""))
-
-    case {Enum.count(people, & &1.paid), length(people)} do
-      {_paid, 0} -> nil
-      {paid, total} when paid == total -> "todos pagaram"
-      {paid, total} -> "#{paid} de #{total} já pagaram"
+  defp paid_summary(%Event{} = event) do
+    case {Cash.per_person_cents(event), Cash.summary(event)} do
+      {nil, _} -> nil
+      {_, %{total_count: 0}} -> nil
+      {_, %{paid_count: paid, total_count: paid}} -> "todos pagaram"
+      {_, %{paid_count: paid, total_count: total}} -> "#{paid} de #{total} já pagaram"
     end
   end
 
@@ -880,6 +912,20 @@ defmodule RolezinhoWeb.EventLive do
   # RN-12/RN-13: the organizer marks anyone; a participant marks only their own
   # row. The check is here rather than in the template because the button being
   # absent does not stop the message from arriving.
+  # Same rule as the paid check, re-checked here because the form being
+  # absent does not stop the message from arriving.
+  def handle_event("set_contribution", %{"index" => index, "amount" => amount}, socket) do
+    case socket.assigns.event do
+      %Event{split_method: :settle_up} ->
+        authorize_row(socket, :main, index, &Policy.can_toggle_paid?/3, fn event, position ->
+          Events.set_contribution(event, position, amount)
+        end)
+
+      %Event{} ->
+        {:noreply, socket}
+    end
+  end
+
   def handle_event("toggle_paid_main", %{"index" => index}, socket) do
     authorize_row(socket, :main, index, &Policy.can_toggle_paid?/3, fn event, position ->
       Events.toggle_paid_main(event, position)
@@ -1306,8 +1352,10 @@ defmodule RolezinhoWeb.EventLive do
             slug={@event.slug}
             google_calendar_url={@google_calendar_url}
             pix={@pix}
-            amount={Cash.format_amount(@event.price_cents)}
+            amount={if(@event.split_method != :settle_up, do: Cash.amount_line_text(@event))}
           />
+
+          <.settlement_card :if={@settlement} plan={@settlement} editable={@settlement_editable} />
 
           <!-- The organizer's own words, in a card of their own. Loose under the
                details it read as a stray paragraph belonging to nothing; labelled,

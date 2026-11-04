@@ -82,8 +82,8 @@ defmodule RolezinhoWeb.JoinController do
     if payable?(event), do: ~p"/r/#{event.slug}/pagamento", else: ~p"/r/#{event.slug}"
   end
 
-  defp payable?(%Event{price_cents: cents, pix_key: key}) do
-    is_integer(cents) and cents > 0 and is_binary(key) and key != ""
+  defp payable?(%Event{pix_key: key} = event) do
+    is_integer(Rolezinho.Event.Cash.per_person_cents(event)) and is_binary(key) and key != ""
   end
 
   # Answers to the organizer's questions (RN-62). Only the fields this event

@@ -25,6 +25,9 @@ defmodule Rolezinho.Event.Attendee do
   embedded_schema do
     field :name, :string, default: ""
     field :paid, :boolean, default: false
+    # What this person spent on the rolê, for the "Dividir no final" split
+    # method (`Rolezinho.Event.Settlement`). Ignored by every other method.
+    field :contributed_cents, :integer, default: 0
 
     field :participant_id, :string
     field :user_id, :integer
@@ -41,6 +44,7 @@ defmodule Rolezinho.Event.Attendee do
   @type t :: %__MODULE__{
           name: String.t(),
           paid: boolean(),
+          contributed_cents: non_neg_integer(),
           participant_id: String.t() | nil,
           user_id: integer() | nil,
           joined_at: DateTime.t() | nil,
@@ -49,8 +53,17 @@ defmodule Rolezinho.Event.Attendee do
 
   def changeset(attendee, params \\ %{}) do
     attendee
-    |> cast(params, [:name, :paid, :participant_id, :user_id, :joined_at, :values])
+    |> cast(params, [
+      :name,
+      :paid,
+      :contributed_cents,
+      :participant_id,
+      :user_id,
+      :joined_at,
+      :values
+    ])
     |> validate_length(:name, max: 60)
+    |> validate_number(:contributed_cents, greater_than_or_equal_to: 0)
   end
 
   @doc """
