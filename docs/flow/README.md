@@ -41,6 +41,7 @@ skill does it automatically).
 
 | Flow | Type | Doc |
 | --- | --- | --- |
+| Home page | Screen/listing | [home-page.md](home-page.md) |
 | Split method (Método de separação) | Transactional flow | [split-method.md](split-method.md) |
 
 ## What doesn't go in a doc
