@@ -52,6 +52,17 @@ defmodule RolezinhoWeb.Components.UI.RoleCard do
   # as a tiny eye-off icon next to the status pill so the marker takes
   # a few pixels rather than a full pill of horizontal space.
   attr :hidden?, :boolean, default: false
+
+  # The viewer's part in this rolê (`Rolezinho.Event.Membership.status/4`).
+  # Any value draws the blue border and replaces the status pill: whether
+  # *I* am in is what someone scanning the home is looking for.
+  attr :member, :atom,
+    default: nil,
+    values: [nil, :caloteiro, :participating, :waiting, :organizing]
+
+  # Rolês inside a group carry the group's name, so a grouped event on the
+  # home still reads as part of its group.
+  attr :group_name, :string, default: nil
   attr :class, :any, default: nil
 
   def role_card(assigns) do
@@ -59,13 +70,17 @@ defmodule RolezinhoWeb.Components.UI.RoleCard do
     <.link
       navigate={@navigate}
       class={[
-        "block rounded-card border border-hairline bg-base-100 p-4 shadow-card",
+        "block rounded-card bg-base-100 p-4 shadow-card",
+        if(@member, do: "border-2 border-info", else: "border border-hairline"),
         "transition-transform active:scale-[.99]",
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
         @class
       ]}
     >
-      <div :if={@category || @status || @hidden?} class="flex items-center gap-2">
+      <div
+        :if={@category || @status || @hidden? || @member || @group_name}
+        class="flex items-center gap-2"
+      >
         <span
           :if={@category}
           class="grid size-6 shrink-0 place-items-center rounded-lg bg-accent text-[11px] font-bold text-accent-content"
@@ -80,6 +95,13 @@ defmodule RolezinhoWeb.Components.UI.RoleCard do
           {@category}
         </span>
         <span
+          :if={@group_name}
+          class="inline-flex min-w-0 items-center gap-1 rounded-row bg-ink/[0.06] px-2 py-1 text-[10px] font-bold text-ink"
+        >
+          <.icon name="tabler-users-group" class="size-3.5 shrink-0" />
+          <span class="truncate">{@group_name}</span>
+        </span>
+        <span
           :if={@hidden?}
           class="ml-auto inline-flex shrink-0 items-center text-warning"
           title="Oculto: não aparece na home pública"
@@ -88,7 +110,14 @@ defmodule RolezinhoWeb.Components.UI.RoleCard do
           <span class="sr-only">Oculto</span>
         </span>
         <.status_pill
-          :if={@status}
+          :if={@member}
+          tone={member_tone(@member)}
+          class={[not @hidden? && "ml-auto"]}
+        >
+          {member_label(@member)}
+        </.status_pill>
+        <.status_pill
+          :if={@status && !@member}
           tone={@status}
           class={[not @hidden? && "ml-auto"]}
           title={@status_hint}
@@ -121,6 +150,14 @@ defmodule RolezinhoWeb.Components.UI.RoleCard do
     </.link>
     """
   end
+
+  defp member_tone(:caloteiro), do: "debt"
+  defp member_tone(_member), do: "member"
+
+  defp member_label(:caloteiro), do: "Caloteiro"
+  defp member_label(:participating), do: "Participando"
+  defp member_label(:waiting), do: "Na espera"
+  defp member_label(:organizing), do: "Organizando"
 
   defp default_status_label("open"), do: "Vagas abertas"
   defp default_status_label("full"), do: "Lista cheia"

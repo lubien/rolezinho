@@ -27,7 +27,8 @@ defmodule Storybook.UI.StatusPill do
             attributes: %{tone: "payments_only"},
             slots: ["Payments only"]
           },
-          %Variation{id: :debt, attributes: %{tone: "debt"}, slots: ["Pix pending"]}
+          %Variation{id: :debt, attributes: %{tone: "debt"}, slots: ["Pix pending"]},
+          %Variation{id: :member, attributes: %{tone: "member"}, slots: ["Participando"]}
         ]
       }
     ]

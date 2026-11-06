@@ -42,6 +42,37 @@ defmodule Storybook.UI.RoleCard do
         }
       },
       %Variation{
+        id: :member,
+        description:
+          "The viewer is on the list: blue border, and the pill says so instead of the " <>
+            "list status. Inside a group, the group's name rides along.",
+        attributes: %{
+          title: "Beach volleyball",
+          when_text: "Wednesday · 7pm to 9pm",
+          category: "Sport",
+          status: "open",
+          member: :participating,
+          group_name: "Turma do Vôlei",
+          filled: 17,
+          capacity: 18,
+          names: ["Marcia", "Roberta", "Henrique"],
+          navigate: "/"
+        }
+      },
+      %Variation{
+        id: :caloteiro,
+        description: "Payments only, and the viewer still owes.",
+        attributes: %{
+          title: "Friday barbecue",
+          when_text: "Friday · 6pm",
+          status: "payments_only",
+          member: :caloteiro,
+          filled: 12,
+          capacity: 12,
+          navigate: "/"
+        }
+      },
+      %Variation{
         id: :minimal,
         description: "Without a category or a list yet — right after it is created.",
         attributes: %{

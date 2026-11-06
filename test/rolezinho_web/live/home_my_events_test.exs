@@ -161,12 +161,7 @@ defmodule RolezinhoWeb.HomeMyEventsTest do
     refute html =~ "Escondido do estranho"
   end
 
-  test "a grouped rolê the user owns does NOT surface on the home", %{conn: conn} do
-    # Invariant: an event that belongs to a group lives on that group's
-    # page, not on `/`. Applies to hidden and visible events, and to
-    # owned and joined rows alike — the group page is the one entry
-    # point (password gating on a group relies on it). The user reaches
-    # the event by opening their group.
+  test "a grouped rolê the user owns surfaces with the group's badge", %{conn: conn} do
     user = create_user("grouped-owner")
 
     {:ok, group} =
@@ -185,23 +180,20 @@ defmodule RolezinhoWeb.HomeMyEventsTest do
     conn = signed_in(conn, user)
     {:ok, view, _html} = live(conn, ~p"/")
 
-    # No card links to it. The title alone is not the check: the
-    # multi-share sheet lists every owned rolê, grouped ones included.
-    refute has_element?(view, ~s(a[href="/r/in-group-1"]))
+    assert has_element?(view, ~s(a[href="/r/in-group-1"]), "Meu Grupo")
+    assert has_element?(view, ~s(a[href="/r/in-group-1"]), "Organizando")
   end
 
-  test "a hidden grouped rolê the user owns also does NOT surface on the home",
-       %{conn: conn} do
-    # Specific case the user hit in prod: hidden + grouped + owned by me
-    # was leaking onto `/`. Both filters (hidden hides on public shelf;
-    # grouped hides on private shelf) must combine so the event only
-    # appears on its group's page.
+  test "a rolê in a locked group stays off the home, even for its owner", %{conn: conn} do
+    # A password-protected group the viewer hasn't unlocked renders nothing
+    # on any surface (SECURITY.md §3) — not its name, not its events.
     user = create_user("grouped-hidden-owner")
 
     {:ok, group} =
       Groups.create(%{
-        "name" => "Meu Grupo",
-        "slug" => "gh-#{System.unique_integer([:positive])}"
+        "name" => "Grupo Trancado",
+        "slug" => "gh-#{System.unique_integer([:positive])}",
+        "password" => "segredo"
       })
 
     {:ok, mine} =
@@ -220,10 +212,9 @@ defmodule RolezinhoWeb.HomeMyEventsTest do
     {:ok, _} = Events.set_hidden(mine, true)
 
     conn = signed_in(conn, user)
-    {:ok, view, _html} = live(conn, ~p"/")
+    {:ok, view, html} = live(conn, ~p"/")
 
-    # No card links to it. The title alone is not the check: the
-    # multi-share sheet lists every owned rolê, grouped ones included.
     refute has_element?(view, ~s(a[href="/r/hidden-in-group-1"]))
+    refute html =~ "Escondido no grupo"
   end
 end

@@ -61,60 +61,40 @@ defmodule Rolezinho.Events do
   end
 
   @doc """
-  The home listing for a signed-in caller: unions `list_open/0` with the
-  ungrouped events they own or joined, deduped and ordered.
+  The home listing: `list_open/0` plus the viewer's own events, deduped and
+  ordered — public ones first, then the viewer's extras in date order.
 
-  "Own or joined" includes hidden events (the whole point of the shelf
-  is finding your own things regardless of listing state), but *not*
-  grouped events — those live under their group's page, whether the
-  caller is the owner or not. Reaching them from the home would double
-  the surface where a grouped rolê appears, and password-gated groups
-  rely on the group page being the one entry point.
+  "Own" means created by `user_id`, joined by `user_id` (main or waiting
+  list), or one of `device_slugs` — the slugs this browser holds a
+  participant or organizer token for. Those slugs are only *candidates*: the
+  caller still checks the token against the event (see
+  `Rolezinho.Event.Membership`), since a stale token for a slug proves
+  nothing.
 
-  `:done` rolezinhos are also excluded: the home is about what is next,
-  not a scrollable archive.
-
-  With `nil` (an anonymous caller) this collapses to `list_open/0`, so
-  the HomeLive path stays a one-liner.
+  Own events include hidden and grouped ones; the group is preloaded so the
+  caller can badge it and apply the group's password gate. `:done` events
+  are left out: the home is about what is next, not an archive.
   """
-  @spec list_home_for(integer() | nil) :: [Event.t()]
-  def list_home_for(nil), do: list_open()
+  @spec list_home_for(integer() | nil, [String.t()]) :: [Event.t()]
+  def list_home_for(user_id, device_slugs \\ [])
 
-  def list_home_for(user_id) when is_integer(user_id) do
+  def list_home_for(nil, []), do: list_open() |> Repo.preload(:group)
+
+  def list_home_for(user_id, device_slugs) when is_list(device_slugs) do
     open = list_open()
 
-    # `main_list` / `wait_list` are `{:array, :map}` — `jsonb[]` in Postgres.
-    # `unnest()` turns the array into rows of jsonb, then `->>` reads the
-    # user_id string from each attendee's map. Null-safe cast: rows with a
-    # nil user_id compare unequal, which is the intent (anonymous joins
-    # don't count as "joined by user X").
     mine =
       from(e in Event,
-        where: e.status != :done and is_nil(e.group_id),
-        where:
-          e.created_by_user_id == ^user_id or
-            fragment(
-              "EXISTS (SELECT 1 FROM unnest(?) att WHERE (att->>'user_id')::int = ?)",
-              e.main_list,
-              ^user_id
-            ) or
-            fragment(
-              "EXISTS (SELECT 1 FROM unnest(?) att WHERE (att->>'user_id')::int = ?)",
-              e.wait_list,
-              ^user_id
-            ),
+        where: e.status != :done,
+        where: ^own_condition(user_id, device_slugs),
         order_by: [asc_nulls_last: e.starts_at, asc: e.title]
       )
       |> Repo.all()
 
-    # Union + dedupe (by id) + preserve overall ordering: open ones first
-    # (already sorted), then the "mine" ones that were not in open, keeping
-    # their own order among themselves. This is what a mental "home + a
-    # personal shelf underneath" reads as.
     open_ids = MapSet.new(open, & &1.id)
     extra_mine = Enum.reject(mine, &MapSet.member?(open_ids, &1.id))
 
-    open ++ extra_mine
+    Repo.preload(open ++ extra_mine, :group)
   end
 
   @doc """
@@ -130,9 +110,34 @@ defmodule Rolezinho.Events do
   def list_shareable_for(user_id) when is_integer(user_id) do
     from(e in Event,
       where: e.created_by_user_id == ^user_id and e.status != :done,
-      order_by: [asc_nulls_last: e.starts_at, asc: e.title]
+      order_by: [asc_nulls_last: e.starts_at, asc: e.title],
+      preload: :group
     )
     |> Repo.all()
+  end
+
+  # `main_list` / `wait_list` are `{:array, :map}` — `jsonb[]` in Postgres.
+  # `unnest()` turns the array into rows of jsonb, then `->>` reads the
+  # user_id string from each attendee's map. Rows with a nil user_id compare
+  # unequal, which is the intent (anonymous joins don't count as "joined by
+  # user X"). Built with `dynamic/2` because Ecto refuses `== ^nil`.
+  defp own_condition(nil, device_slugs), do: dynamic([e], e.slug in ^device_slugs)
+
+  defp own_condition(user_id, device_slugs) do
+    dynamic(
+      [e],
+      e.slug in ^device_slugs or e.created_by_user_id == ^user_id or
+        fragment(
+          "EXISTS (SELECT 1 FROM unnest(?) att WHERE (att->>'user_id')::int = ?)",
+          e.main_list,
+          ^user_id
+        ) or
+        fragment(
+          "EXISTS (SELECT 1 FROM unnest(?) att WHERE (att->>'user_id')::int = ?)",
+          e.wait_list,
+          ^user_id
+        )
+    )
   end
 
   @doc "Lists strictly active events."

@@ -18,7 +18,7 @@ defmodule RolezinhoWeb.Components.UI.StatusPill do
       <.status_pill tone="done">Closed</.status_pill>
       <.status_pill tone="debt">Pix pending</.status_pill>
   """
-  attr :tone, :string, default: "open", values: ~w(open full done debt payments_only maybe)
+  attr :tone, :string, default: "open", values: ~w(open full done debt payments_only maybe member)
   attr :class, :any, default: nil
   attr :rest, :global
 
@@ -48,4 +48,8 @@ defmodule RolezinhoWeb.Components.UI.StatusPill do
   # keeps it visibly distinct from the other four tones (green tint, black,
   # gray, yellow, red) on a card row.
   defp tone_classes("maybe"), do: "bg-info text-info-content"
+  # "member" marks the viewer's own rolês on the home (Participando, Na
+  # espera, Organizando): the same blue as the card's border, tinted rather
+  # than solid so it doesn't read as the "maybe" status.
+  defp tone_classes("member"), do: "bg-info/15 text-info"
 end

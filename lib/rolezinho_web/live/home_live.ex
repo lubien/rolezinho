@@ -19,7 +19,9 @@ defmodule RolezinhoWeb.HomeLive do
   alias Rolezinho.Events
   alias Rolezinho.Group
   alias Rolezinho.Groups
+  alias Rolezinho.Event.Membership
   alias Rolezinho.MultiShare
+  alias RolezinhoWeb.Plugs.Participant
   alias RolezinhoWeb.Components.UI.BottomSheet
 
   # Below this, scanning the list is faster than filtering it.
@@ -72,13 +74,28 @@ defmodule RolezinhoWeb.HomeLive do
   end
 
   defp load_events(socket) do
-    # Signed-in callers get their own rolês mixed in under the public
-    # listing: "what's open" + "what's mine" (owned or joined), deduped.
-    # Anonymous callers keep the plain public listing.
+    # The public listing plus the viewer's own rolês: created or joined while
+    # signed in, or held by this browser's participant/organizer tokens.
     user_id = socket.assigns[:current_user_id]
+    participants = socket.assigns[:participants] || %{}
+    organizer_tokens = socket.assigns[:organizer_tokens] || %{}
+    device_slugs = Enum.uniq(Map.keys(participants) ++ Map.keys(organizer_tokens))
+
+    with_membership =
+      user_id
+      |> Events.list_home_for(device_slugs)
+      |> Enum.map(fn event ->
+        organizer? =
+          Participant.organizer?(%{"organizer_tokens" => organizer_tokens}, event) or
+            (is_integer(user_id) and event.created_by_user_id == user_id)
+
+        {event, Membership.status(event, Map.get(participants, event.slug), user_id, organizer?)}
+      end)
+      |> Enum.filter(fn {event, member} -> listable?(event, member, socket) end)
 
     socket
-    |> assign(:events, Events.list_home_for(user_id))
+    |> assign(:events, Enum.map(with_membership, &elem(&1, 0)))
+    |> assign(:membership, Map.new(with_membership, fn {event, member} -> {event.id, member} end))
     |> assign(:groups, Groups.list_public())
     |> apply_filter()
     |> load_shareable(user_id)
@@ -87,7 +104,13 @@ defmodule RolezinhoWeb.HomeLive do
   # Everything starts selected; on a live refresh the existing selection is
   # kept, minus events that stopped being shareable, plus newly created ones.
   defp load_shareable(socket, user_id) do
-    shareable = Events.list_shareable_for(user_id)
+    # Same group gate as the listing: an event inside a group this viewer
+    # can't open doesn't get its title into the share sheet either.
+    shareable =
+      user_id
+      |> Events.list_shareable_for()
+      |> Enum.filter(&group_open?(&1, socket))
+
     ids = MapSet.new(shareable, & &1.id)
 
     selected =
@@ -124,6 +147,29 @@ defmodule RolezinhoWeb.HomeLive do
   end
 
   defp event_url(%Event{slug: slug}), do: RolezinhoWeb.Endpoint.url() <> "/r/" <> slug
+
+  # A device slug is only a candidate: without a real membership the event
+  # stays off unless it is public anyway. A grouped event also needs its
+  # group open to this viewer — a locked group renders nothing, anywhere
+  # (SECURITY.md §3).
+  defp listable?(%Event{group: %Group{}} = event, member, socket),
+    do: not is_nil(member) and group_open?(event, socket)
+
+  defp listable?(%Event{} = event, member, _socket), do: not is_nil(member) or public?(event)
+
+  defp group_open?(%Event{group: %Group{} = group}, socket) do
+    group_accessible?(
+      group,
+      socket.assigns.current_admin?,
+      socket.assigns[:unlocked_groups],
+      socket.assigns[:current_user_id]
+    )
+  end
+
+  defp group_open?(%Event{}, _socket), do: true
+
+  defp public?(%Event{} = event),
+    do: event.status in Event.open_statuses() and not event.hidden and is_nil(event.group_id)
 
   defp apply_filter(socket) do
     events = socket.assigns.events
@@ -288,6 +334,8 @@ defmodule RolezinhoWeb.HomeLive do
               filled={filled_count(event)}
               capacity={event.main_capacity}
               names={attendee_names(event)}
+              member={@membership[event.id]}
+              group_name={event.group && event.group.name}
               navigate={~p"/r/#{event.slug}"}
             />
           </li>
