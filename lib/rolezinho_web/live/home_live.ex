@@ -92,6 +92,7 @@ defmodule RolezinhoWeb.HomeLive do
         {event, Membership.status(event, Map.get(participants, event.slug), user_id, organizer?)}
       end)
       |> Enum.filter(fn {event, member} -> listable?(event, member, socket) end)
+      |> Enum.sort_by(fn {event, _member} -> group_order(event) end)
 
     socket
     |> assign(:events, Enum.map(with_membership, &elem(&1, 0)))
@@ -167,6 +168,11 @@ defmodule RolezinhoWeb.HomeLive do
   end
 
   defp group_open?(%Event{}, _socket), do: true
+
+  # Grouped rolês first, by group name; ungrouped ones after. `sort_by` is
+  # stable, so the date order from the query holds inside each bucket.
+  defp group_order(%Event{group: %Group{name: name}}), do: {0, String.downcase(name)}
+  defp group_order(%Event{}), do: {1, ""}
 
   defp public?(%Event{} = event),
     do: event.status in Event.open_statuses() and not event.hidden and is_nil(event.group_id)

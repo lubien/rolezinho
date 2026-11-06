@@ -105,4 +105,43 @@ defmodule RolezinhoWeb.HomeMembershipTest do
     assert has_element?(view, card("hm-grouped"), "Turma do Vôlei")
     assert has_element?(view, card("hm-grouped"), "Participando")
   end
+
+  test "grouped rolês come first, by group name, then the rest by date", %{conn: conn} do
+    {:ok, zeta} =
+      Groups.create(%{"name" => "Zeta", "slug" => "g-zeta-#{System.unique_integer([:positive])}"})
+
+    {:ok, alfa} =
+      Groups.create(%{"name" => "alfa", "slug" => "g-alfa-#{System.unique_integer([:positive])}"})
+
+    loose = create_event(%{"slug" => "hm-loose", "date" => "2026-11-01", "time" => "10:00"})
+
+    in_zeta =
+      create_event(%{"slug" => "hm-zeta", "date" => "2026-11-02"},
+        admin?: true,
+        group_id: zeta.id
+      )
+
+    in_alfa =
+      create_event(%{"slug" => "hm-alfa", "date" => "2026-11-03"},
+        admin?: true,
+        group_id: alfa.id
+      )
+
+    tokens =
+      for event <- [loose, in_zeta, in_alfa], into: %{} do
+        {:ok, _, _} = Events.add_party(event, "Eu", 1, participant_id: "tok-#{event.slug}")
+        {event.slug, "tok-#{event.slug}"}
+      end
+
+    {:ok, view, _html} = live(device_conn(conn, tokens), ~p"/")
+
+    slugs =
+      view
+      |> render()
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query("li > a[href^='/r/hm-']")
+      |> LazyHTML.attribute("href")
+
+    assert slugs == ["/r/hm-alfa", "/r/hm-zeta", "/r/hm-loose"]
+  end
 end
