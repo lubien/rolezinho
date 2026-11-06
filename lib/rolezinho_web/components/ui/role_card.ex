@@ -83,7 +83,13 @@ defmodule RolezinhoWeb.Components.UI.RoleCard do
       >
         <span
           :if={@category}
-          class="grid size-6 shrink-0 place-items-center rounded-lg bg-accent text-[11px] font-bold text-accent-content"
+          class={[
+            "grid size-6 shrink-0 place-items-center rounded-lg text-[11px] font-bold",
+            if(@member,
+              do: "bg-info text-info-content",
+              else: "bg-accent text-accent-content"
+            )
+          ]}
           aria-hidden="true"
         >
           {@category_initial || String.first(@category)}
