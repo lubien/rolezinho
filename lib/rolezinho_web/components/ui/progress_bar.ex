@@ -19,6 +19,12 @@ defmodule RolezinhoWeb.Components.UI.ProgressBar do
   attr :filled, :integer, required: true
   attr :capacity, :integer, required: true
   attr :label, :string, default: nil, doc: "when given, renders the header row with the counter"
+
+  attr :tone, :string,
+    default: "accent",
+    values: ~w(accent info),
+    doc: "fill color; `info` marks the viewer's own rolês on the home"
+
   attr :class, :any, default: nil
 
   def progress_bar(assigns) do
@@ -38,7 +44,10 @@ defmodule RolezinhoWeb.Components.UI.ProgressBar do
         aria-valuemax={@capacity}
         aria-label={@label || "List occupancy"}
       >
-        <div class="h-full rounded-full bg-accent transition-[width]" style={"width: #{@percent}%"} />
+        <div
+          class={["h-full rounded-full transition-[width]", fill_class(@tone)]}
+          style={"width: #{@percent}%"}
+        />
       </div>
     </div>
     """
@@ -49,4 +58,7 @@ defmodule RolezinhoWeb.Components.UI.ProgressBar do
   defp percent(filled, capacity) do
     filled |> max(0) |> min(capacity) |> Kernel.*(100) |> div(capacity)
   end
+
+  defp fill_class("info"), do: "bg-info"
+  defp fill_class(_accent), do: "bg-accent"
 end

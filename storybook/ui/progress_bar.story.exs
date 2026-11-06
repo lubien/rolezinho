@@ -27,6 +27,11 @@ defmodule Storybook.UI.ProgressBar do
         ]
       },
       %Variation{
+        id: :info,
+        description: "The blue fill used on the viewer's own rolês on the home.",
+        attributes: %{filled: 5, capacity: 10, tone: "info"}
+      },
+      %Variation{
         id: :bare,
         description: "Without a label it is just the bar — for use inside an event card.",
         attributes: %{filled: 9, capacity: 20}

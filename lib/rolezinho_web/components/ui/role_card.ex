@@ -152,7 +152,13 @@ defmodule RolezinhoWeb.Components.UI.RoleCard do
         </span>
       </div>
 
-      <.progress_bar :if={@filled && @capacity} filled={@filled} capacity={@capacity} class="mt-2.5" />
+      <.progress_bar
+        :if={@filled && @capacity}
+        filled={@filled}
+        capacity={@capacity}
+        tone={if(@member, do: "info", else: "accent")}
+        class="mt-2.5"
+      />
     </.link>
     """
   end
