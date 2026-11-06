@@ -113,6 +113,8 @@ defmodule RolezinhoWeb do
       import RolezinhoWeb.Components.UI.SearchField
       import RolezinhoWeb.Components.UI.SectionHeader
       import RolezinhoWeb.Components.UI.SegmentedControl
+      import RolezinhoWeb.Components.UI.SettlementCard
+      import RolezinhoWeb.Components.UI.SplitMethodFields
       import RolezinhoWeb.Components.UI.SharePreview
       import RolezinhoWeb.Components.UI.Skeleton
       import RolezinhoWeb.Components.UI.StatusPill

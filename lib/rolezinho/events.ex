@@ -356,7 +356,9 @@ defmodule Rolezinho.Events do
          local: trimmed(params, "local"),
          starts_at: parse_datetime(params["starts_at"]) || combine_date_time(params),
          ends_at: parse_datetime(params["ends_at"]),
+         split_method: parse_split_method(params["split_method"]),
          price_cents: parse_price(params["price"]),
+         total_cents: parse_price(params["total"]),
          pix_key: pix_key,
          pix_key_type: pix_key_type
        }}
@@ -470,6 +472,17 @@ defmodule Rolezinho.Events do
 
   defp parse_price(_), do: nil
 
+  # Known strings to known atoms; anything else falls back to the default
+  # rather than building an atom from user input.
+  defp parse_split_method(method)
+       when method in [:total_split, :per_person, :per_seat, :settle_up],
+       do: method
+
+  defp parse_split_method("total_split"), do: :total_split
+  defp parse_split_method("per_seat"), do: :per_seat
+  defp parse_split_method("settle_up"), do: :settle_up
+  defp parse_split_method(_), do: :per_person
+
   defp pad_cents(cents) do
     cents |> String.pad_trailing(2, "0") |> String.to_integer()
   end
@@ -542,7 +555,9 @@ defmodule Rolezinho.Events do
       local: attrs.local,
       starts_at: attrs.starts_at,
       ends_at: attrs.ends_at,
+      split_method: attrs.split_method,
       price_cents: attrs.price_cents,
+      total_cents: attrs.total_cents,
       pix_key: attrs.pix_key,
       pix_key_type: attrs.pix_key_type
     }
@@ -917,7 +932,9 @@ defmodule Rolezinho.Events do
         starts_at: combine_date_time(params),
         category: trimmed(params, "category"),
         password: params |> Map.get("password", "") |> to_string(),
+        split_method: parse_split_method(Map.get(params, "split_method", event.split_method)),
         price_cents: parse_price(params["price"]),
+        total_cents: parse_price(Map.get(params, "total", event.total_cents)),
         pix_key: pix_key,
         pix_key_type: pix_key_type
       }
@@ -1013,7 +1030,9 @@ defmodule Rolezinho.Events do
 
     if errors == %{} do
       attrs = %{
+        split_method: parse_split_method(Map.get(params, "split_method", event.split_method)),
         price_cents: parse_price(params["price"]),
+        total_cents: parse_price(Map.get(params, "total", event.total_cents)),
         pix_key: pix_key,
         pix_key_type: pix_key_type
       }
@@ -1289,6 +1308,65 @@ defmodule Rolezinho.Events do
     |> Enum.take(limit)
     |> Enum.map(fn {canonical, _joined_at} -> canonical end)
   end
+
+  @doc """
+  Records what the main-list attendee at `index` spent, and where they want to
+  be paid back, for "Dividir no final".
+
+  Params (string keys, as the form sends them):
+
+    * `"amount"` — what the visitor typed ("200", "R$ 32,50"); blank clears it
+      to zero. Bounded so a typo (or a hostile POST) can't turn the plan into
+      nonsense.
+    * `"pix_key"` — optional; blank clears it. Stored as typed, but it has to
+      have the shape of a Pix key (`Rolezinho.Pix.classify/1`). When the key
+      is absent from the params, the stored one is kept.
+
+  The caller checks who may write the row — the same rule as the paid check
+  (`Policy.can_toggle_paid?/3`).
+  """
+  @spec set_contribution(Event.t(), pos_integer(), map()) ::
+          {:ok, Event.t()} | {:error, :invalid_amount | :invalid_pix_key | map()}
+  def set_contribution(%Event{} = event, index, params) when is_map(params) do
+    current = Enum.at(event.main_list, index - 1)
+
+    with {:ok, cents} <- parse_contribution(params["amount"]),
+         {:ok, pix_key} <-
+           parse_payout_pix(Map.get(params, "pix_key", current && current.pix_key)) do
+      save(Event.set_contribution(event, index, cents, pix_key))
+    end
+  end
+
+  defp parse_payout_pix(nil), do: {:ok, nil}
+
+  defp parse_payout_pix(key) when is_binary(key), do: key |> String.trim() |> check_payout_pix()
+
+  defp parse_payout_pix(_), do: {:error, :invalid_pix_key}
+
+  defp check_payout_pix(""), do: {:ok, nil}
+
+  defp check_payout_pix(key) do
+    case {String.length(key) <= 100, Pix.classify(key)} do
+      {true, {:ok, _type, _canonical}} -> {:ok, key}
+      _ -> {:error, :invalid_pix_key}
+    end
+  end
+
+  defp parse_contribution(amount) when amount in [nil, ""], do: {:ok, 0}
+
+  defp parse_contribution(amount) when is_binary(amount) do
+    max = max_contribution_cents()
+
+    case parse_price(amount) do
+      cents when is_integer(cents) and cents <= max -> {:ok, cents}
+      _ -> {:error, :invalid_amount}
+    end
+  end
+
+  defp parse_contribution(_), do: {:error, :invalid_amount}
+
+  # R$ 100.000 — far above any rolê, low enough to keep the numbers sane.
+  defp max_contribution_cents, do: 10_000_000
 
   def remove_main(%Event{} = event, index), do: save(Event.remove_main(event, index))
   def remove_wait(%Event{} = event, index), do: save(Event.remove_wait(event, index))

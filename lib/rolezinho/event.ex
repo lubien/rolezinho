@@ -13,7 +13,9 @@ defmodule Rolezinho.Event do
 
   alias Rolezinho.Event
   alias Rolezinho.Event.Attendee
+  alias Rolezinho.Event.Cash
   alias Rolezinho.Event.FormField
+  alias Rolezinho.Event.Settlement
 
   # `:maybe` ("averiguando resenha") is the tentative state: the event
   # might happen, depending on how many people opt in — signup is open,
@@ -31,6 +33,7 @@ defmodule Rolezinho.Event do
   # Statuses that appear on the public home page (still subject to the
   # `hidden` flag applied at the query layer in `Rolezinho.Events`).
   @open_statuses [:active, :maybe, :payments_only]
+  @split_methods [:total_split, :per_person, :per_seat, :settle_up]
 
   # Statuses reachable by direct slug for anonymous visitors. Hidden events
   # remain reachable by slug — that's the whole point of being unlisted-
@@ -63,7 +66,13 @@ defmodule Rolezinho.Event do
     field :local, :string
     field :starts_at, :utc_datetime
     field :ends_at, :utc_datetime
+    # How the cost is split. `price_cents` is the per-seat price for
+    # `:per_person` / `:per_seat`; `total_cents` is the whole bill for
+    # `:total_split`; `:settle_up` uses neither — each attendee records what
+    # they spent (`Attendee.contributed_cents`). See `Rolezinho.Event.Cash`.
+    field :split_method, Ecto.Enum, values: @split_methods, default: :per_person
     field :price_cents, :integer
+    field :total_cents, :integer
     field :pix_key, :string
 
     # Which of the five DICT key types the `pix_key` above is. The organizer
@@ -98,6 +107,7 @@ defmodule Rolezinho.Event do
   end
 
   @type status :: :active | :maybe | :payments_only | :done
+  @type split_method :: :total_split | :per_person | :per_seat | :settle_up
 
   @type t :: %__MODULE__{
           id: integer() | nil,
@@ -117,7 +127,9 @@ defmodule Rolezinho.Event do
           local: String.t() | nil,
           starts_at: DateTime.t() | nil,
           ends_at: DateTime.t() | nil,
+          split_method: split_method(),
           price_cents: non_neg_integer() | nil,
+          total_cents: non_neg_integer() | nil,
           pix_key: String.t() | nil,
           pix_key_type: :phone | :cpf | :cnpj | :email | :random | nil,
           organizer_token: String.t() | nil,
@@ -147,7 +159,9 @@ defmodule Rolezinho.Event do
       :local,
       :starts_at,
       :ends_at,
+      :split_method,
       :price_cents,
+      :total_cents,
       :pix_key,
       :pix_key_type
     ])
@@ -168,6 +182,7 @@ defmodule Rolezinho.Event do
     |> validate_length(:category, max: 40)
     |> validate_length(:pix_key, max: 100)
     |> validate_number(:price_cents, greater_than_or_equal_to: 0)
+    |> validate_number(:total_cents, greater_than_or_equal_to: 0)
     |> validate_ends_after_starts()
     |> unique_constraint(:slug, message: "já está em uso")
   end
@@ -211,6 +226,16 @@ defmodule Rolezinho.Event do
       changeset
     end
   end
+
+  @doc "Valid values for the `split_method` enum, in the order the form lists them."
+  def split_methods, do: @split_methods
+
+  @doc "The label for a `split_method` — what the form and the shared text call it."
+  @spec split_method_label(split_method()) :: String.t()
+  def split_method_label(:total_split), do: "Dividir automaticamente total"
+  def split_method_label(:per_person), do: "Preço por participante"
+  def split_method_label(:per_seat), do: "Preço por participante (inclui vazios)"
+  def split_method_label(:settle_up), do: "Dividir no final"
 
   @doc "Valid values for the `status` enum."
   def statuses, do: @statuses
@@ -332,6 +357,9 @@ defmodule Rolezinho.Event do
 
   Payments-only events omit the vagas/espera summary lines automatically, since
   in that mode signups are closed.
+
+  The payment line (`Rolezinho.Event.Cash.amount_line_text/1`) follows the
+  header, and is omitted together with it under `:hide_description`.
   """
   @spec to_text(t(), String.t() | nil, keyword()) :: String.t()
   def to_text(%Event{} = event, url \\ nil, opts \\ []) do
@@ -375,6 +403,14 @@ defmodule Rolezinho.Event do
 
     hide_names? = Keyword.get(opts, :hide_names, false)
 
+    parts =
+      case {hide_description?, Cash.amount_line_text(event)} do
+        {false, line} when is_binary(line) -> parts ++ ["", line]
+        _ -> parts
+      end
+
+    parts = parts ++ settlement_text(event, hide_description? or hide_names?)
+
     parts = parts ++ ["", main_list_text(event, url, hide_names?)]
 
     parts =
@@ -407,7 +443,9 @@ defmodule Rolezinho.Event do
     lines =
       filled
       |> Enum.with_index(1)
-      |> Enum.map(fn {%Attendee{} = att, i} -> render_attendee_line(i, att, hide_names?) end)
+      |> Enum.map(fn {%Attendee{} = att, i} ->
+        render_attendee_line(i, att, hide_names?, contribution_suffix(event, att, hide_names?))
+      end)
 
     lines =
       if free > 0 and not locked_signups?(event) do
@@ -790,7 +828,9 @@ defmodule Rolezinho.Event do
       local: event.local,
       starts_at: event.starts_at,
       ends_at: event.ends_at,
+      split_method: event.split_method,
       price_cents: event.price_cents,
+      total_cents: event.total_cents,
       pix_key: event.pix_key,
       pix_key_type: event.pix_key_type,
       main_list: Enum.map(event.main_list, &attendee_to_map/1),
@@ -811,6 +851,8 @@ defmodule Rolezinho.Event do
     %{
       name: attendee.name,
       paid: attendee.paid,
+      contributed_cents: attendee.contributed_cents,
+      pix_key: attendee.pix_key,
       participant_id: attendee.participant_id,
       user_id: attendee.user_id,
       joined_at: attendee.joined_at,
@@ -841,15 +883,59 @@ defmodule Rolezinho.Event do
   @doc "Placeholder used when attendee names must be hidden (locked view)."
   def hidden_name_placeholder, do: @hidden_name_placeholder
 
-  defp render_attendee_line(i, att, hide_names? \\ false)
+  defp render_attendee_line(i, att, hide_names? \\ false, suffix \\ "")
 
-  defp render_attendee_line(i, %Attendee{name: "", paid: _}, _hide?), do: "#{i}- "
+  defp render_attendee_line(i, %Attendee{name: "", paid: _}, _hide?, _suffix), do: "#{i}- "
 
-  defp render_attendee_line(i, %Attendee{name: name, paid: paid}, hide?) do
+  defp render_attendee_line(i, %Attendee{name: name, paid: paid}, hide?, suffix) do
     display = if hide?, do: @hidden_name_placeholder, else: name
     mark = if paid, do: " ✅", else: ""
-    "#{i}- #{display}#{mark}"
+    "#{i}- #{display}#{suffix}#{mark}"
   end
+
+  # "Dividir no final": who sends what to whom, one line per sender, with the
+  # sender's ✅ once they say they sent it. Left out whenever names are, since
+  # the plan is nothing but names.
+  defp settlement_text(%Event{split_method: :settle_up} = event, false = _hidden?) do
+    case Settlement.by_sender(Settlement.plan(event)) do
+      [] ->
+        []
+
+      groups ->
+        lines =
+          Enum.map(groups, fn {sender, transfers} ->
+            amounts =
+              Enum.map_join(transfers, " e ", fn transfer ->
+                "#{Cash.format_amount(transfer.cents)} para #{transfer.to.name}"
+              end)
+
+            "#{sender.name} manda #{amounts}" <> if(sender.paid, do: " ✅", else: "")
+          end)
+
+        ["", "Plano de pagamento" | lines] ++ receiver_pix_text(Settlement.plan(event))
+    end
+  end
+
+  defp settlement_text(%Event{}, _hidden?), do: []
+
+  # One block with each receiver's key, rather than the key repeated on every
+  # line that pays them — five "(Pix: …)" in a row is noise in a group chat.
+  defp receiver_pix_text(plan) do
+    case Enum.filter(Settlement.receivers(plan), & &1.pix_key) do
+      [] -> []
+      receivers -> ["", "Pix de quem recebe" | Enum.map(receivers, &"#{&1.name}: #{&1.pix_key}")]
+    end
+  end
+
+  defp contribution_suffix(
+         %Event{split_method: :settle_up},
+         %Attendee{contributed_cents: cents},
+         false = _hide_names?
+       )
+       when is_integer(cents) and cents > 0,
+       do: " (pagou #{Cash.format_amount(cents)})"
+
+  defp contribution_suffix(%Event{}, %Attendee{}, _hide_names?), do: ""
 
   defp compact_main(list) do
     Enum.reject(list, fn %Attendee{name: n} -> String.trim(n) == "" end)
@@ -879,6 +965,21 @@ defmodule Rolezinho.Event do
       end)
 
     new
+  end
+
+  @doc """
+  Records what the main-list attendee at `index` (1-based) spent, in cents,
+  and the Pix key they want to be paid back on (`nil` for none).
+  """
+  @spec set_contribution(t(), pos_integer(), non_neg_integer(), String.t() | nil) :: t()
+  def set_contribution(%Event{} = event, index, cents, pix_key)
+      when is_integer(cents) and cents >= 0 do
+    list =
+      update_at(event.main_list, index - 1, fn att ->
+        %{att | contributed_cents: cents, pix_key: pix_key}
+      end)
+
+    %{event | main_list: list}
   end
 
   defp update_at(list, index, fun) do

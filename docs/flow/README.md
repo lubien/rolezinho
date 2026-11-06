@@ -41,7 +41,7 @@ skill does it automatically).
 
 | Flow | Type | Doc |
 | --- | --- | --- |
-| (none documented yet) | | |
+| Split method (Método de separação) | Transactional flow | [split-method.md](split-method.md) |
 
 ## What doesn't go in a doc
 

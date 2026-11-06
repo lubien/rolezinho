@@ -41,7 +41,7 @@ defmodule RolezinhoWeb.PaymentLive do
     |> assign(:participant_id, participant_id)
     |> assign(:user_id, user_id)
     |> assign(:row, row)
-    |> assign(:amount, Cash.format_amount(event.price_cents))
+    |> assign(:amount, Cash.format_amount(Cash.per_person_cents(event)))
     |> assign(:pix, pix_for(event))
   end
 
