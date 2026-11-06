@@ -263,6 +263,25 @@ defmodule RolezinhoWeb.HomeLive do
           </div>
         </header>
 
+        <section
+          :if={is_nil(@current_user)}
+          id="home-sign-in-prompt"
+          class="mt-4 flex items-center gap-3 rounded-card border border-hairline bg-base-100 p-3.5"
+        >
+          <.icon name="tabler-user-circle" class="size-6 shrink-0 text-info" />
+          <p class="min-w-0 flex-1 text-[13px] leading-snug">
+            Faça login para acompanhar seus rolezinhos facilmente
+          </p>
+          <.action_button
+            id="home-sign-in-btn"
+            navigate={~p"/entrar?#{[return_to: "/"]}"}
+            full_width={false}
+            class="shrink-0"
+          >
+            Entrar
+          </.action_button>
+        </section>
+
         <ul
           :if={@groups != []}
           id="group-list"

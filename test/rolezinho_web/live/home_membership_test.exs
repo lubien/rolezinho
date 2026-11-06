@@ -168,4 +168,24 @@ defmodule RolezinhoWeb.HomeMembershipTest do
     refute has_element?(view, ~s(#group-list a[href="/g/#{other.slug}"] .bg-info))
     assert has_element?(view, ~s(#group-list a[href="/g/#{other.slug}"] .bg-accent))
   end
+
+  test "anonymous visitors get the sign-in prompt; signed-in users don't", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/")
+    assert has_element?(view, "#home-sign-in-prompt")
+    assert has_element?(view, ~s(#home-sign-in-btn[href^="/entrar"]))
+
+    {:ok, user} =
+      Rolezinho.Accounts.find_or_create_by_github(%{
+        "github_id" => System.unique_integer([:positive]),
+        "github_login" => "prompt-user"
+      })
+
+    signed_in =
+      build_conn()
+      |> Plug.Test.init_test_session(%{})
+      |> Plug.Conn.put_session(:current_user_id, user.id)
+
+    {:ok, view, _html} = live(signed_in, ~p"/")
+    refute has_element?(view, "#home-sign-in-prompt")
+  end
 end
