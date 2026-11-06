@@ -144,4 +144,28 @@ defmodule RolezinhoWeb.HomeMembershipTest do
 
     assert slugs == ["/r/hm-alfa", "/r/hm-zeta", "/r/hm-loose"]
   end
+
+  test "a group holding a rolê I'm on gets the blue tile; others keep theirs", %{conn: conn} do
+    {:ok, mine} =
+      Groups.create(%{
+        "name" => "Minha Turma",
+        "slug" => "g-mine-#{System.unique_integer([:positive])}"
+      })
+
+    {:ok, other} =
+      Groups.create(%{
+        "name" => "Outra Turma",
+        "slug" => "g-other-#{System.unique_integer([:positive])}"
+      })
+
+    event = create_event(%{"slug" => "hm-in-mine"}, admin?: true, group_id: mine.id)
+    {:ok, _, _} = Events.add_party(event, "Eu", 1, participant_id: "tok-me")
+    create_event(%{"slug" => "hm-in-other"}, admin?: true, group_id: other.id)
+
+    {:ok, view, _html} = live(device_conn(conn, %{event.slug => "tok-me"}), ~p"/")
+
+    assert has_element?(view, ~s(#group-list a[href="/g/#{mine.slug}"] .bg-info))
+    refute has_element?(view, ~s(#group-list a[href="/g/#{other.slug}"] .bg-info))
+    assert has_element?(view, ~s(#group-list a[href="/g/#{other.slug}"] .bg-accent))
+  end
 end

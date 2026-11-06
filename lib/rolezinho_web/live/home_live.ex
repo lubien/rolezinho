@@ -97,6 +97,18 @@ defmodule RolezinhoWeb.HomeLive do
     socket
     |> assign(:events, Enum.map(with_membership, &elem(&1, 0)))
     |> assign(:membership, Map.new(with_membership, fn {event, member} -> {event.id, member} end))
+    # Groups holding a rolê the viewer is part of get the same blue as those
+    # rolês' cards. Built from the already-gated list, so a locked group never
+    # gains a marker.
+    |> assign(
+      :member_group_ids,
+      for(
+        {%Event{group_id: id}, member} when not is_nil(id) and not is_nil(member) <-
+          with_membership,
+        into: MapSet.new(),
+        do: id
+      )
+    )
     |> assign(:groups, Groups.list_public())
     |> apply_filter()
     |> load_shareable(user_id)
@@ -261,7 +273,13 @@ defmodule RolezinhoWeb.HomeLive do
               navigate={~p"/g/#{group.slug}"}
               class="flex items-center gap-3 rounded-card border border-hairline bg-base-100 p-4 shadow-card transition-transform active:scale-[.99]"
             >
-              <div class="grid size-11 shrink-0 place-items-center rounded-[14px] bg-accent text-accent-content">
+              <div class={[
+                "grid size-11 shrink-0 place-items-center rounded-[14px]",
+                if(MapSet.member?(@member_group_ids, group.id),
+                  do: "bg-info text-info-content",
+                  else: "bg-accent text-accent-content"
+                )
+              ]}>
                 <.icon name="tabler-users-group" class="size-5" />
               </div>
               <div class="min-w-0 flex-1">
@@ -297,7 +315,13 @@ defmodule RolezinhoWeb.HomeLive do
                           @current_user_id
                         )
                     }
-                    class="ml-1.5 text-success"
+                    class={[
+                      "ml-1.5",
+                      if(MapSet.member?(@member_group_ids, group.id),
+                        do: "text-info",
+                        else: "text-success"
+                      )
+                    ]}
                   >· com acesso</span>
                 </p>
               </div>
