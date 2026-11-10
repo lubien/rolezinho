@@ -1367,7 +1367,7 @@ defmodule RolezinhoWeb.EventLive do
             <h2 class="text-[10px] font-semibold uppercase tracking-wide text-muted">
               Recado do organizador
             </h2>
-            <div class="prose prose-sm mt-1.5 max-w-none leading-relaxed prose-p:my-1.5 prose-p:text-[13px]">
+            <div id="organizer-note" class={["mt-1.5 text-[13px]", markdown_class()]}>
               {raw(render_markdown(@stripped_header))}
             </div>
           </section>
@@ -1642,7 +1642,7 @@ defmodule RolezinhoWeb.EventLive do
         </section>
 
         <section :if={@event.footer != ""} class="rounded-2xl border border-base-300 bg-base-100 p-5">
-          <div class="prose prose-sm sm:prose-base max-w-none">
+          <div id="event-footer" class={markdown_class()}>
             {raw(render_markdown(@event.footer))}
           </div>
         </section>
@@ -2364,6 +2364,19 @@ defmodule RolezinhoWeb.EventLive do
       </div>
     </section>
     """
+  end
+
+  # Styling for rendered organizer markdown. Plain Tailwind on purpose: the
+  # `prose` classes need the typography plugin, which this project doesn't
+  # ship, so they did nothing — and Tailwind's base reset strips paragraph
+  # margins and list markers, which made a blank line in the description
+  # vanish on the page while the shared text kept it.
+  defp markdown_class do
+    [
+      "leading-relaxed space-y-3",
+      "[&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5",
+      "[&_a]:underline [&_a]:underline-offset-2"
+    ]
   end
 
   defp render_markdown(text) when is_binary(text) do
