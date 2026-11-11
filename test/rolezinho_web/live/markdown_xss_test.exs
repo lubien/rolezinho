@@ -6,7 +6,7 @@ defmodule RolezinhoWeb.MarkdownXssTest do
 
   The rendered markdown reaches the page through `raw(...)`, and writes to an event are
   anonymous, so any visitor can reach this. Earmark is retired with no patched release;
-  the mitigation lives in `EventLive.render_markdown/1`.
+  the mitigation lives in `RolezinhoWeb.Markdown.render/1`.
   """
   use RolezinhoWeb.ConnCase, async: false
 
