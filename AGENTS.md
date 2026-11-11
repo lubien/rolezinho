@@ -80,9 +80,11 @@ of `app.css`), Tabler icons, Earmark for markdown, deployed on Fly.io.
 
 Breaking any of these is a bug, not a style choice:
 
-1. **`escape: true` in Earmark.** It's what prevents stored XSS in the `raw(...)` calls
-   that render user-written markdown. Never turn it off; never create a second markdown
-   rendering path. (`SECURITY.md`, section 1)
+1. **User markdown renders only through `RolezinhoWeb.Markdown.render/1`.** Its
+   quote replacement, `escape: true`, and allowlist sanitizer together prevent stored
+   XSS in the `raw(...)` calls; `escape: true` alone lets HTML blocks through. Never
+   drop a step; never create a second markdown rendering path. (`SECURITY.md`,
+   section 1)
 2. **Admin requires the plug *and* the `on_mount`.** The plug protects the HTTP request;
    the `on_mount` protects the socket connection, which doesn't pass through the
    pipeline. Either one alone leaves the surface open from the other side.

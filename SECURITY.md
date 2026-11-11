@@ -126,42 +126,41 @@ visitor is rendered as markdown** on the event page.
 ### The markdown invariant (critical)
 
 An event's description, header, and footer are markdown written by people and
-rendered via `raw(...)` in `RolezinhoWeb.EventLive`. What makes that safe is a
-single option in the Earmark call:
+rendered via `raw(...)` in `RolezinhoWeb.EventLive`. Every one of those goes through
+a single function, `RolezinhoWeb.Markdown.render/1`, which runs four steps in order:
 
-```elixir
-Earmark.as_html(text, breaks: true, escape: true, compact_output: false)
-```
+1. WhatsApp markup becomes markdown (`Rolezinho.Event.WhatsMarkup`).
+2. `"` becomes `&quot;`. Earmark 1.4.x writes link and image URLs and titles
+   straight into attributes without escaping quotes, so
+   `[x](http://a/?b=c" onerror="alert(1))` would otherwise close the attribute and
+   inject a handler (EEF-CVE-2026-48591; the package is retired and no patched
+   release is coming).
+3. Earmark renders with `escape: true`. Links get `target="_blank"` and
+   `rel="noopener noreferrer nofollow"`; a link whose scheme isn't `http`, `https`, or
+   `mailto` is reduced to its text.
+4. The HTML goes through an allowlist sanitizer, `RolezinhoWeb.Markdown.Scrubber`
+   (`html_sanitize_ex`): only the tags markdown produces survive, with no styling or
+   event attributes, `href` limited to `http`/`https`/`mailto`, and no images.
 
-**`escape: true` is the invariant that holds up every `raw(...)` in the project.**
-It makes Earmark escape HTML embedded in the markdown, so a `<script>` pasted into
-an event description comes out as text, not as a script. Switching it to
-`escape: false` — or rendering user markdown through another path without that
-option — opens stored XSS across every event page at once.
-
-`escape: true` covers markup in text, and **not** quotes in the attributes Earmark
-generates. Earmark 1.4.x writes link and image URLs straight into `href`/`src`, so a
-description containing `[x](http://a/?b=c" onerror="alert(1))` used to close the
-attribute and inject a handler (EEF-CVE-2026-48591). The package is retired and no
-patched release is coming, so `render_markdown/1` replaces `"` with `&quot;` before
-parsing: what reaches an attribute can no longer terminate it. `markdown_xss_test.exs`
-covers the three vectors — URL, image URL, and link title.
-
-The second invariant, then: **user text never reaches Earmark without passing through
-that replacement.** Both hold only while a single rendering path exists.
+`escape: true` alone is **not** enough: it escapes HTML inside a paragraph, but a line
+that starts with `<` is an HTML block, which Earmark passes through raw (`<script>`,
+`<iframe>`, `<form>`, `<div style=…>`). The sanitizer is what guarantees nothing
+outside the allowlist reaches the page. `markdown_test.exs` covers the HTML-block,
+scheme, and link vectors; `markdown_xss_test.exs` covers the quote vectors (URL, image
+URL, and link title).
 
 Rules:
 
-- Never change `escape: true` to `false`.
-- Never call Earmark without the quote replacement that precedes it.
-- Do not introduce a second markdown rendering path. If you need one, reuse the
-  existing function instead of calling Earmark directly.
+- Never change `escape: true` to `false`, remove the quote replacement, or skip the
+  sanitizer — each covers a hole the others don't.
+- Do not introduce a second markdown rendering path. Never call Earmark outside
+  `RolezinhoWeb.Markdown`; reuse `render/1`.
+- Widening the allowlist (a new tag or attribute in `Scrubber`) is a security change:
+  justify it and add a test for it.
 - When adding a new `raw(...)`, its content must come from one of two origins:
-  markdown passed through the renderer with `escape: true`, or markup generated
-  entirely by our own code (e.g. the Pix QR code SVG, produced by `Rolezinho.Pix`,
-  with no user-supplied fragment).
-- If real HTML ever needs to be allowed in a description, sanitize with an allowlist
-  (e.g. `HtmlSanitizeEx`) — never trust the raw content.
+  `RolezinhoWeb.Markdown.render/1`, or markup generated entirely by our own code
+  (e.g. the Pix QR code SVG, produced by `Rolezinho.Pix`, with no user-supplied
+  fragment).
 
 ### Remaining rendering rules
 
@@ -489,7 +488,8 @@ endpoints, OAuth, password-protected group unlock via API. See
 Three questions, every time:
 
 1. **What external content am I rendering** — is it escaped, and does the markdown
-   still go through `escape: true` *and* the quote replacement?
+   still go through `RolezinhoWeb.Markdown.render/1` (quote replacement,
+   `escape: true`, and the allowlist sanitizer)?
 2. **What action am I adding** — is it admin or public? If it's admin, does it have
    both the plug **and** the `on_mount`? If it's a privileged `handle_event`, does it
    re-check permission in the handler?

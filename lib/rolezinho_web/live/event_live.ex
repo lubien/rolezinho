@@ -12,12 +12,12 @@ defmodule RolezinhoWeb.EventLive do
   alias Rolezinho.Event.Meta
   alias Rolezinho.Event.Policy
   alias Rolezinho.Event.Settlement
-  alias Rolezinho.Event.WhatsMarkup
   alias Rolezinho.Events
   alias Rolezinho.Group
   alias Rolezinho.Groups
   alias Rolezinho.Pix
   alias RolezinhoWeb.Components.UI.BottomSheet
+  alias RolezinhoWeb.Markdown
   alias RolezinhoWeb.Plugs.Participant
 
   @impl true
@@ -1368,7 +1368,7 @@ defmodule RolezinhoWeb.EventLive do
               Recado do organizador
             </h2>
             <div id="organizer-note" class={["mt-1.5 text-[13px]", markdown_class()]}>
-              {raw(render_markdown(@stripped_header))}
+              {raw(Markdown.render(@stripped_header))}
             </div>
           </section>
         </header>
@@ -1643,7 +1643,7 @@ defmodule RolezinhoWeb.EventLive do
 
         <section :if={@event.footer != ""} class="rounded-2xl border border-base-300 bg-base-100 p-5">
           <div id="event-footer" class={markdown_class()}>
-            {raw(render_markdown(@event.footer))}
+            {raw(Markdown.render(@event.footer))}
           </div>
         </section>
         <!-- Deliberately tighter than the article's 32px rhythm, which separates
@@ -2378,31 +2378,4 @@ defmodule RolezinhoWeb.EventLive do
       "[&_a]:underline [&_a]:underline-offset-2"
     ]
   end
-
-  defp render_markdown(text) when is_binary(text) do
-    text
-    # WhatsApp markup first, so what the organizer typed becomes markdown before
-    # anything else looks at it. Then the quote neutralizer, which has to be the
-    # last thing standing between user text and Earmark — swapping these two
-    # would let a converted span reintroduce a quote after it was made safe.
-    |> WhatsMarkup.to_markdown()
-    |> neutralize_attribute_injection()
-    |> Earmark.as_html(breaks: true, escape: true, compact_output: false)
-    |> case do
-      {:ok, html, _warnings} -> html
-      {:error, html, _warnings} -> html
-    end
-  end
-
-  # Earmark 1.4.x interpolates link/image URLs and titles into `href`/`src`/`title`
-  # attributes without escaping double quotes, so `[x](http://a/?b=c" onerror="alert(1))`
-  # closes the attribute and injects an event handler (EEF-CVE-2026-48591, no patched
-  # release — the package is retired). `escape: true` does not cover this: it escapes
-  # markup in text, not quotes inside generated attributes.
-  #
-  # Writes here are anonymous, so this is reachable by any visitor. Replacing the quote
-  # with its HTML entity before parsing means whatever reaches an attribute can no longer
-  # terminate it, while the character still renders as a quote in body text. Markdown
-  # itself goes away in the structured-fields migration, which removes this path entirely.
-  defp neutralize_attribute_injection(text), do: String.replace(text, "\"", "&quot;")
 end
