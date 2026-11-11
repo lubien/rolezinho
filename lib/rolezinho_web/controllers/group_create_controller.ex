@@ -20,6 +20,7 @@ defmodule RolezinhoWeb.GroupCreateController do
   alias RolezinhoWeb.Plugs.Admin
 
   def create(conn, %{"group" => params}) do
+    params = RolezinhoWeb.AccessCodeField.to_password(params)
     admin? = conn.assigns.current_admin?
     current_user = conn.assigns[:current_user]
 

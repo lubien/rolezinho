@@ -245,7 +245,7 @@ defmodule RolezinhoWeb.WhenWhereTest do
           "time" => "19:00",
           "price" => "",
           "pix_key" => "",
-          "password" => "",
+          "access_code" => "",
           "slug" => current_slug
         }
       })

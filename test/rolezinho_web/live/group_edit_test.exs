@@ -69,7 +69,7 @@ defmodule RolezinhoWeb.GroupEditTest do
 
     test "sets a password", %{conn: conn, group: group} do
       {:ok, view, _html} = live(conn, ~p"/admin/g/#{group.slug}/edit")
-      render_submit(view, "save_password", %{"password" => "s3cret"})
+      render_submit(view, "save_password", %{"access_code" => "s3cret"})
       assert Groups.find(group.slug).password == "s3cret"
     end
 

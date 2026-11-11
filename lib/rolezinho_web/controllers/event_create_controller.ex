@@ -29,6 +29,7 @@ defmodule RolezinhoWeb.EventCreateController do
   # the group (per ADR-0002), so we pass `current_user_id` through here.
 
   def create(conn, %{"event" => params}) do
+    params = RolezinhoWeb.AccessCodeField.to_password(params)
     admin? = conn.assigns.current_admin?
     current_user = conn.assigns[:current_user]
     unlocked_groups = conn.assigns[:unlocked_groups] || MapSet.new()

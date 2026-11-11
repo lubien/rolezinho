@@ -58,7 +58,7 @@ defmodule RolezinhoWeb.EventEditDetailsTest do
       "price" => "15",
       "pix_key" => "9199999999",
       "pix_key_type" => "phone",
-      "password" => "",
+      "access_code" => "",
       "slug" => "same"
     }
 
@@ -73,7 +73,7 @@ defmodule RolezinhoWeb.EventEditDetailsTest do
     end
 
     test "every text/textarea/date field lives in one #details-form", %{view: view} do
-      for name <- ~w(title description category local date time price pix_key password slug) do
+      for name <- ~w(title description category local date time price pix_key access_code slug) do
         assert has_element?(view, "#details-form [name='details[#{name}]']"),
                "expected #details-form to carry a control for #{name}"
       end
@@ -132,7 +132,7 @@ defmodule RolezinhoWeb.EventEditDetailsTest do
           "price" => "22,50",
           "pix_key" => "novo@example.com",
           "pix_key_type" => "email",
-          "password" => "SEGREDO",
+          "access_code" => "SEGREDO",
           "slug" => event.slug
         })
       )
@@ -232,7 +232,12 @@ defmodule RolezinhoWeb.EventEditDetailsTest do
       view
       |> form(
         "#details-form",
-        details_params(%{"password" => "", "price" => "", "pix_key" => "", "slug" => event.slug})
+        details_params(%{
+          "access_code" => "",
+          "price" => "",
+          "pix_key" => "",
+          "slug" => event.slug
+        })
       )
       |> render_submit()
 
@@ -555,7 +560,7 @@ defmodule RolezinhoWeb.EventEditDetailsTest do
           "time" => "",
           "price" => "",
           "pix_key" => "",
-          "password" => "",
+          "access_code" => "",
           "slug" => "meu-rolezinho-18-09"
         },
         overrides

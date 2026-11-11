@@ -60,7 +60,7 @@ defmodule RolezinhoWeb.EventNewLive do
       "main_size" => "18",
       "wait_size" => "3",
       "auto_promote" => "false",
-      "password" => "",
+      "access_code" => "",
       "pix_key_type" => "",
       # Not-hidden by default for a signed-in creator (they can see their
       # own hidden rolezinhos on the home too now, but the safest default
@@ -350,7 +350,11 @@ defmodule RolezinhoWeb.EventNewLive do
             </p>
 
             <div class="mt-3.5">
-              <.input field={@form[:password]} label="Senha da lista" autocomplete="off" />
+              <.input
+                field={@form[:access_code]}
+                label="Senha da lista"
+                {RolezinhoWeb.AccessCodeField.ignore_attrs()}
+              />
             </div>
           </section>
 

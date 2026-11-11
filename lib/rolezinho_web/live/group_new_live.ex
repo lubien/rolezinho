@@ -33,7 +33,7 @@ defmodule RolezinhoWeb.GroupNewLive do
     %{
       "name" => "",
       "slug" => "",
-      "password" => "",
+      "access_code" => "",
       "visibility" => "public"
     }
   end
@@ -67,7 +67,7 @@ defmodule RolezinhoWeb.GroupNewLive do
         <button
           type="submit"
           form="new-group-form"
-          data-confirm-if-empty="password"
+          data-confirm-if-empty="access_code"
           class="w-full rounded-cta bg-ink px-4 py-4 text-[15px] font-bold text-ink-content shadow-cta transition-transform active:scale-[.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         >
           Criar grupo
@@ -163,9 +163,9 @@ defmodule RolezinhoWeb.GroupNewLive do
 
             <div class="mt-3.5">
               <.input
-                field={@form[:password]}
+                field={@form[:access_code]}
                 label="Senha do grupo"
-                autocomplete="off"
+                {RolezinhoWeb.AccessCodeField.ignore_attrs()}
                 placeholder="deixa em branco pra grupo aberto"
               />
             </div>
@@ -188,7 +188,7 @@ defmodule RolezinhoWeb.GroupNewLive do
             this.handler = (e) => {
               const form = document.getElementById("new-group-form")
               if (!form) return
-              const field = form.elements["group[password]"]
+              const field = form.elements["group[access_code]"]
               const value = ((field && field.value) || "").trim()
               if (value === "") {
                 const ok = window.confirm(

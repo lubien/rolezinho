@@ -79,7 +79,7 @@ defmodule RolezinhoWeb.EventEditPixErrorTest do
           "price" => "",
           "pix_key" => "91984933238",
           "pix_key_type" => "",
-          "password" => "",
+          "access_code" => "",
           "slug" => slug
         }
       })

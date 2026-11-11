@@ -152,7 +152,7 @@ defmodule RolezinhoWeb.EventEditLive do
       "total" => price_input_value(event.total_cents),
       "pix_key" => event.pix_key || "",
       "pix_key_type" => event.pix_key_type && Atom.to_string(event.pix_key_type),
-      "password" => event.password || ""
+      "access_code" => event.password || ""
     }
   end
 
@@ -230,7 +230,8 @@ defmodule RolezinhoWeb.EventEditLive do
     # and only proceed to the bulk update if it succeeded. When the slug did
     # not change, `rename_slug/2` is a no-op that returns the same event.
     with {:ok, event} <- rename_if_changed(original_event, effective_slug),
-         {:ok, event} <- Events.update_full_details(event, params) do
+         {:ok, event} <-
+           Events.update_full_details(event, RolezinhoWeb.AccessCodeField.to_password(params)) do
       socket =
         socket
         |> put_flash(:info, "Rolê atualizado.")
@@ -564,13 +565,10 @@ defmodule RolezinhoWeb.EventEditLive do
           />
 
           <.input
-            field={@details_form[:password]}
+            field={@details_form[:access_code]}
             label="Senha (opcional)"
             placeholder="em branco = sem senha"
-            autocomplete="off"
-            data-1p-ignore="true"
-            data-lpignore="true"
-            data-bwignore="true"
+            {RolezinhoWeb.AccessCodeField.ignore_attrs()}
           />
           <p :if={@event.password} class="-mt-2 text-[11px] leading-relaxed text-muted">
             Senha atual:

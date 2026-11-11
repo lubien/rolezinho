@@ -74,11 +74,11 @@ defmodule RolezinhoWeb.GroupEditLive do
     end
   end
 
-  def handle_event("update_password_input", %{"password" => password}, socket) do
+  def handle_event("update_password_input", %{"access_code" => password}, socket) do
     {:noreply, assign(socket, :password_input, password)}
   end
 
-  def handle_event("save_password", %{"password" => password}, socket) do
+  def handle_event("save_password", %{"access_code" => password}, socket) do
     require_editable!(socket)
 
     case Groups.update_password(socket.assigns.group, password) do
@@ -235,12 +235,12 @@ defmodule RolezinhoWeb.GroupEditLive do
             <span class="label text-sm mb-1">Senha</span>
             <input
               type="text"
-              name="password"
-              id="group-password-input"
+              name="access_code"
+              id="group-access-code-input"
               value={@password_input}
               placeholder="em branco = sem senha"
               class={[RolezinhoWeb.CoreComponents.field_class(), "w-full font-mono"]}
-              autocomplete="off"
+              {RolezinhoWeb.AccessCodeField.ignore_attrs()}
             />
           </label>
           <button
