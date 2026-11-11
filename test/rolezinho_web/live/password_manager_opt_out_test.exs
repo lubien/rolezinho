@@ -65,7 +65,10 @@ defmodule RolezinhoWeb.PasswordManagerOptOutTest do
 
     test "group edit form", %{conn: conn} do
       {:ok, group} =
-        Groups.create(%{"name" => "Turma", "slug" => "pm-g-#{System.unique_integer([:positive])}"})
+        Groups.create(%{
+          "name" => "Turma",
+          "slug" => "pm-g-#{System.unique_integer([:positive])}"
+        })
 
       {:ok, _view, html} = live(admin(conn), ~p"/admin/g/#{group.slug}/edit")
       assert password_like_inputs(html, "#group-password-form") == []
