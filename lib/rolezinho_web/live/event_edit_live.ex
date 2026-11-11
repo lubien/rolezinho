@@ -278,7 +278,9 @@ defmodule RolezinhoWeb.EventEditLive do
     with {:ok, main_size} <- parse_int_in_range(main_raw, 1, 500),
          {:ok, wait_size} <- parse_int_in_range(wait_raw, 0, 100),
          {:ok, event} <-
-           Events.resize_lists(socket.assigns.event, main_size, wait_size > 0) do
+           Events.resize_lists(socket.assigns.event, main_size, wait_size > 0,
+             auto_promote: params["auto_promote"] == "true"
+           ) do
       {:noreply,
        socket
        |> put_flash(:info, "Vagas atualizadas.")
@@ -660,6 +662,16 @@ defmodule RolezinhoWeb.EventEditLive do
           <p class="text-[11px] text-muted">
             0 na espera desliga a fila. Não é possível reduzir a lista abaixo
             de quantas pessoas já estão nela. Atualmente: {filled_count(@event)}.
+          </p>
+          <.input
+            type="checkbox"
+            name="auto_promote"
+            id="auto-promote-input"
+            value={@event.auto_promote}
+            label="Promover automaticamente da reserva"
+          />
+          <p class="-mt-2 text-[11px] text-muted">
+            Quando alguém sair da lista, o próximo da reserva entra sozinho.
           </p>
           <div>
             <button

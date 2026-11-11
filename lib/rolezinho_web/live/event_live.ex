@@ -1521,6 +1521,14 @@ defmodule RolezinhoWeb.EventLive do
             <p class="text-sm text-base-content/60">
               {length(@event.wait_list)} pessoa(s) na reserva
             </p>
+            <p
+              :if={@event.auto_promote}
+              id="auto-promote-hint"
+              class="mt-1 flex items-center gap-1.5 text-[12px] text-info"
+            >
+              <.icon name="tabler-circle-arrow-up" class="size-4 shrink-0" />
+              Quando abrir vaga, o próximo da reserva entra automaticamente.
+            </p>
           </div>
 
           <ol :if={@event.wait_list != []} class="space-y-2">

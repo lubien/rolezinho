@@ -364,6 +364,7 @@ defmodule Rolezinho.Events do
          split_method: parse_split_method(params["split_method"]),
          price_cents: parse_price(params["price"]),
          total_cents: parse_price(params["total"]),
+         auto_promote: params["auto_promote"] in [true, "true"],
          pix_key: pix_key,
          pix_key_type: pix_key_type
        }}
@@ -552,6 +553,7 @@ defmodule Rolezinho.Events do
       footer: "",
       main_capacity: attrs.main_size,
       wait_enabled: attrs.wait_size > 0,
+      auto_promote: attrs.auto_promote,
       wait_intro: "Lista de reserva",
       main_list: empty_slots,
       wait_list: [],
@@ -1373,7 +1375,13 @@ defmodule Rolezinho.Events do
   # R$ 100.000 — far above any rolê, low enough to keep the numbers sane.
   defp max_contribution_cents, do: 10_000_000
 
-  def remove_main(%Event{} = event, index), do: save(Event.remove_main(event, index))
+  def remove_main(%Event{} = event, index) do
+    event
+    |> Event.remove_main(index)
+    |> refill_freed(event)
+    |> save()
+  end
+
   def remove_wait(%Event{} = event, index), do: save(Event.remove_wait(event, index))
   def toggle_paid_main(%Event{} = event, index), do: save(Event.toggle_paid_main(event, index))
   def toggle_paid_wait(%Event{} = event, index), do: save(Event.toggle_paid_wait(event, index))
@@ -1472,7 +1480,8 @@ defmodule Rolezinho.Events do
       grow_target = Enum.max([event.main_capacity, target_capacity || 0, max_slot])
 
       event = maybe_resize(event, grow_target)
-      event = apply_row_proposals(event, main, wait)
+      before_rows = event
+      event = event |> apply_row_proposals(main, wait) |> refill_freed(before_rows)
 
       # Post-pass shrink: only fires when the target was set AND is
       # smaller than current capacity. `resize_main/2` clamps at the
@@ -1487,6 +1496,15 @@ defmodule Rolezinho.Events do
 
       save(event)
     end
+  end
+
+  # Every path that can take someone off the main list ends here, so an
+  # auto-promoting event fills exactly the spots that change freed (net: a
+  # row cleared and a new name added in the same change frees nothing).
+  # `Event.fill_from_waitlist/2` decides whether the event promotes at all.
+  defp refill_freed(%Event{} = updated, %Event{} = before) do
+    freed = Event.filled_main_count(before) - Event.filled_main_count(updated)
+    Event.fill_from_waitlist(updated, max(freed, 0))
   end
 
   defp maybe_resize(%Event{main_capacity: current} = event, target)
@@ -1756,12 +1774,16 @@ defmodule Rolezinho.Events do
   Existing wait-list entries are preserved either way; disabling only stops
   new joins from queueing.
   """
-  @spec resize_lists(Event.t(), integer(), boolean()) :: {:ok, Event.t()} | {:error, term()}
-  def resize_lists(%Event{} = event, new_main_size, wait_enabled?)
+  @spec resize_lists(Event.t(), integer(), boolean(), keyword()) ::
+          {:ok, Event.t()} | {:error, term()}
+  def resize_lists(%Event{} = event, new_main_size, wait_enabled?, opts \\ [])
       when is_integer(new_main_size) and is_boolean(wait_enabled?) do
+    auto_promote? = Keyword.get(opts, :auto_promote, event.auto_promote)
+
     event
     |> Event.resize_main(new_main_size)
     |> Map.put(:wait_enabled, wait_enabled?)
+    |> Map.put(:auto_promote, auto_promote? == true)
     |> save()
   end
 

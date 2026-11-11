@@ -128,8 +128,10 @@ defmodule Rolezinho.Event.Policy do
   @doc """
   Returns true when the caller may promote someone from the waiting list.
 
-  RN-31: promotion is a decision, never automatic — an open slot does not pull
-  the queue by itself.
+  RN-31: promotion is the organizer's decision. The queue moves on its own only
+  when the organizer opted into `auto_promote`, and then only into the spots a
+  removal frees (`Rolezinho.Event.fill_from_waitlist/2`) — an empty slot from a
+  capacity change still waits for someone to promote.
   """
   @spec can_promote?(Event.t(), keyword()) :: boolean()
   def can_promote?(%Event{} = event, opts), do: role(event, opts) in [:organizer, :admin]

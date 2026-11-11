@@ -56,6 +56,9 @@ defmodule Rolezinho.Event do
     field :footer, :string, default: ""
     field :main_capacity, :integer, default: 0
     field :wait_enabled, :boolean, default: false
+    # Opt-in: a spot freed on the main list goes to the head of the waiting
+    # list without the organizer stepping in. See `fill_from_waitlist/2`.
+    field :auto_promote, :boolean, default: false
     field :wait_intro, :string, default: "Lista de reserva"
     field :password, :string
 
@@ -119,6 +122,7 @@ defmodule Rolezinho.Event do
           main_capacity: non_neg_integer(),
           main_list: [Attendee.t()],
           wait_enabled: boolean(),
+          auto_promote: boolean(),
           wait_intro: String.t(),
           wait_list: [Attendee.t()],
           footer: String.t(),
@@ -153,6 +157,7 @@ defmodule Rolezinho.Event do
       :footer,
       :main_capacity,
       :wait_enabled,
+      :auto_promote,
       :wait_intro,
       :password,
       :category,
@@ -785,6 +790,31 @@ defmodule Rolezinho.Event do
   end
 
   @doc """
+  Moves up to `count` people from the head of the waiting list into empty main
+  slots, in queue order — what an auto-promoting event does with the spots a
+  removal just freed.
+
+  A no-op unless the event opted in (`auto_promote`) and still takes signups
+  (`:active` or `:maybe`): under "Só pagamentos" the list is closed, and a
+  finished event has nothing to fill. Stops early when the waiting list runs
+  out. Same rules as `promote/2`, including the cleared `paid` flag.
+  """
+  @spec fill_from_waitlist(t(), non_neg_integer()) :: t()
+  def fill_from_waitlist(%Event{auto_promote: true, status: status} = event, count)
+      when status in [:active, :maybe] and count > 0 do
+    case promote(event, 1) do
+      {:ok, promoted} -> fill_from_waitlist(promoted, count - 1)
+      {:error, _reason} -> event
+    end
+  end
+
+  def fill_from_waitlist(%Event{} = event, _count), do: event
+
+  @doc "How many main-list slots hold someone."
+  @spec filled_main_count(t()) :: non_neg_integer()
+  def filled_main_count(%Event{} = event), do: length(compact_main(event.main_list))
+
+  @doc """
   Resizes the main list. When growing, appends empty slots. When shrinking,
   clamps to the number of filled attendees (never removes anyone).
   """
@@ -822,6 +852,7 @@ defmodule Rolezinho.Event do
       footer: event.footer,
       main_capacity: event.main_capacity,
       wait_enabled: event.wait_enabled,
+      auto_promote: event.auto_promote,
       wait_intro: event.wait_intro,
       password: event.password,
       category: event.category,

@@ -59,6 +59,7 @@ defmodule RolezinhoWeb.EventNewLive do
       "description" => "",
       "main_size" => "18",
       "wait_size" => "3",
+      "auto_promote" => "false",
       "password" => "",
       "pix_key_type" => "",
       # Not-hidden by default for a signed-in creator (they can see their
@@ -312,6 +313,16 @@ defmodule RolezinhoWeb.EventNewLive do
             <p class="mt-2 text-[11px] text-muted">
               0 na espera desliga a fila. Depois de criada, ela não tem limite.
             </p>
+            <div class="mt-3">
+              <.input
+                field={@form[:auto_promote]}
+                type="checkbox"
+                label="Promover automaticamente da reserva"
+              />
+              <p class="-mt-1 text-[11px] text-muted">
+                Quando alguém sair da lista, o próximo da reserva entra sozinho.
+              </p>
+            </div>
           </section>
 
           <section class="mt-3 rounded-card border border-hairline bg-base-100 p-4 shadow-card">
