@@ -364,12 +364,14 @@ them:
 
 ## 8. Secrets and configuration
 
-- **No secrets in the repository.** `SECRET_KEY_BASE`, `ADMIN_PASSWORD`, and
-  `DATABASE_URL` come from environment variables read in `config/runtime.exs`.
-- **`ADMIN_PASSWORD` has a development default.** If the variable is unset, the
-  admin password falls back to a default value. That is acceptable in dev and
-  **unacceptable in production** — it is tracked in `TODOS.md` as a pending fix to
-  fail at boot instead of silently accepting the default.
+- **No secrets in the repository.** `SECRET_KEY_BASE`, `ADMIN_PASSWORD`,
+  `DATABASE_URL`, the GitHub OAuth credentials, and the Web Push VAPID keys
+  (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`) come from environment
+  variables read in `config/runtime.exs`.
+- **Production refuses to boot without them.** `config.exs` ships development
+  defaults (an admin password, throwaway VAPID keys in `dev.exs`/`test.exs`);
+  `runtime.exs` raises in production when a required variable is missing, so a
+  deploy can't come up on a default.
 - Do not log event passwords, `ADMIN_PASSWORD`, or login request bodies. Beware
   `inspect` on an event struct: it carries the password.
 - Errors must not expose stack traces, queries, or secrets to the end user.
@@ -482,6 +484,37 @@ endpoints, OAuth, password-protected group unlock via API. See
 `/api.md` for the authoritative "what the API does NOT do" list.
 
 ---
+
+## Push notifications
+
+Signed-in users can follow a group (the bell on `/g/:slug`) and get a Web Push
+notification when a rolê is published in it (`Rolezinho.Notifications`). Two
+things here are easy to get wrong:
+
+- **The push endpoint is a URL the browser hands us, and our server POSTs to
+  it.** Accepted as-is, that is server-side request forgery: anyone could make the
+  server call internal addresses or arbitrary hosts. `PushSubscription` only
+  accepts `https`, default port, no userinfo, on the known browser push services
+  (Google FCM, Mozilla, Apple, Microsoft WNS) — see `allowed_endpoint?/1`. Never
+  widen that list without the same care, and never send to an endpoint that
+  didn't pass it.
+- **An endpoint is a bearer secret for one device.** Whoever holds it (plus the
+  keys) can push to that phone. Endpoints are stored but never rendered, logged,
+  or returned by the API.
+
+Access rules:
+
+- Following requires a signed-in user and a group the user can open
+  (`Group.accessible?/4`): a password-protected group they haven't unlocked can't
+  be followed. The `push_follow` handler re-checks both; the bell being hidden on
+  a locked group is not the gate.
+- Access is re-checked when each notification is sent: a follower who can no
+  longer open the group (password changed, unlock gone) stops receiving its
+  notifications.
+- Notifications carry the rolê's real title and date and appear on lock screens;
+  only people who can open the group receive them.
+- One account keeps at most ten devices, so a single user can't make every
+  announcement fan out without bound.
 
 ## Before closing out any change
 

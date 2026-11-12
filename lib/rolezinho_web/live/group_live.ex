@@ -18,6 +18,8 @@ defmodule RolezinhoWeb.GroupLive do
 
   alias Rolezinho.Group
   alias Rolezinho.Groups
+  alias Rolezinho.Notifications
+  alias RolezinhoWeb.Components.UI.BottomSheet
 
   @impl true
   def mount(%{"slug" => slug}, _session, socket) do
@@ -90,6 +92,7 @@ defmodule RolezinhoWeb.GroupLive do
     |> assign(:password_protected?, Group.password_protected?(group))
     |> assign(:events, events)
     |> assign(:page_title, page_title_for(group, socket))
+    |> assign(:following?, Notifications.following?(socket.assigns[:current_user_id], group.id))
   end
 
   defp page_title_for(%Group{} = group, socket) do
@@ -114,6 +117,48 @@ defmodule RolezinhoWeb.GroupLive do
   end
 
   @impl true
+  # The bell. The hook only sends this after the browser granted permission
+  # and produced a push subscription; the server still re-checks that someone
+  # is signed in and can open the group (`Notifications.follow/3`).
+  def handle_event("push_follow", %{"subscription" => %{} = subscription} = params, socket) do
+    case socket.assigns[:current_user] do
+      %Rolezinho.Accounts.User{} = user ->
+        with {:ok, _device} <-
+               Notifications.register_device(user, subscription, params["user_agent"]),
+             {:ok, _follow} <-
+               Notifications.follow(user, socket.assigns.group,
+                 admin?: socket.assigns.current_admin?,
+                 unlocked_groups: socket.assigns.unlocked_groups
+               ) do
+          {:noreply,
+           socket
+           |> assign(:following?, true)
+           |> put_flash(:info, "Pronto! Você vai receber um aviso quando sair rolê novo aqui.")}
+        else
+          _error ->
+            {:noreply, put_flash(socket, :error, "Não deu pra ativar os avisos neste aparelho.")}
+        end
+
+      nil ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("push_unfollow", _params, socket) do
+    case socket.assigns[:current_user] do
+      %Rolezinho.Accounts.User{} = user ->
+        :ok = Notifications.unfollow(user, socket.assigns.group)
+
+        {:noreply,
+         socket
+         |> assign(:following?, false)
+         |> put_flash(:info, "Avisos desse grupo desligados.")}
+
+      nil ->
+        {:noreply, socket}
+    end
+  end
+
   def handle_event("update_name_input", %{"name" => name}, socket) do
     {:noreply, assign(socket, :name_input, name)}
   end
@@ -189,7 +234,10 @@ defmodule RolezinhoWeb.GroupLive do
           current_admin?={@current_admin?}
           name_input={@name_input}
           password_input={@password_input}
+          current_user={@current_user}
+          following?={@following?}
         />
+        <.push_sheets group={@group} />
       <% end %>
     </Layouts.app>
     """
@@ -266,6 +314,8 @@ defmodule RolezinhoWeb.GroupLive do
   attr :current_admin?, :boolean, required: true
   attr :name_input, :string, required: true
   attr :password_input, :string, required: true
+  attr :current_user, :any, default: nil
+  attr :following?, :boolean, default: false
 
   defp group_view(assigns) do
     ~H"""
@@ -300,6 +350,7 @@ defmodule RolezinhoWeb.GroupLive do
         <div class="flex items-start justify-between gap-3">
           <h1 class="min-w-0 flex-1 text-2xl font-extrabold tracking-tight">{@group.name}</h1>
           <div class="flex shrink-0 items-center gap-1.5">
+            <.push_bell current_user={@current_user} following?={@following?} />
             <.link
               :if={@current_admin?}
               navigate={~p"/admin/g/#{@group.slug}/edit"}
@@ -475,5 +526,163 @@ defmodule RolezinhoWeb.GroupLive do
     list
     |> Enum.map(&String.trim(&1.name))
     |> Enum.reject(&(&1 == ""))
+  end
+
+  # The bell next to the group's name. Anonymous visitors see it too: tapping
+  # opens the sign-in sheet, since notifications belong to an account.
+  attr :current_user, :any, default: nil
+  attr :following?, :boolean, default: false
+
+  defp push_bell(%{current_user: nil} = assigns) do
+    ~H"""
+    <button
+      type="button"
+      id="push-bell"
+      phx-click={BottomSheet.show("push-login-sheet")}
+      class={bell_class(false)}
+      aria-label="Receber avisos de rolê novo"
+    >
+      <.icon name="tabler-bell" class="size-[18px]" />
+    </button>
+    """
+  end
+
+  defp push_bell(assigns) do
+    assigns =
+      assign(
+        assigns,
+        :vapid_public_key,
+        Application.fetch_env!(:web_push_elixir, :vapid_public_key)
+      )
+
+    ~H"""
+    <button
+      type="button"
+      id="push-bell"
+      phx-hook=".PushBell"
+      data-following={to_string(@following?)}
+      data-vapid-key={@vapid_public_key}
+      data-ios-hint={BottomSheet.show("push-ios-sheet")}
+      data-unavailable-hint={BottomSheet.show("push-unavailable-sheet")}
+      class={bell_class(@following?)}
+      aria-pressed={to_string(@following?)}
+      aria-label={
+        if(@following?, do: "Desligar avisos desse grupo", else: "Receber avisos de rolê novo")
+      }
+    >
+      <.icon :if={@following?} name="tabler-bell-ringing-filled" class="size-[18px]" />
+      <.icon :if={!@following?} name="tabler-bell" class="size-[18px]" />
+    </button>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".PushBell">
+      // Base64url VAPID key -> the Uint8Array PushManager.subscribe() wants.
+      const keyBytes = (key) => {
+        const padded = (key + "=".repeat((4 - (key.length % 4)) % 4)).replace(/-/g, "+").replace(/_/g, "/")
+        return Uint8Array.from(atob(padded), (c) => c.charCodeAt(0))
+      }
+
+      export default {
+        mounted() {
+          this.el.addEventListener("click", () => this.toggle())
+        },
+        async toggle() {
+          if (this.el.dataset.following === "true") {
+            this.pushEvent("push_unfollow", {})
+            return
+          }
+
+          // iPhone and iPad only deliver Web Push to an app added to the home
+          // screen and opened from there.
+          const ios = /iphone|ipad|ipod/i.test(navigator.userAgent)
+          const standalone =
+            window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true
+          if (ios && !standalone) return this.liveSocket.execJS(this.el, this.el.dataset.iosHint)
+
+          const supported = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window
+          if (!supported) return this.liveSocket.execJS(this.el, this.el.dataset.unavailableHint)
+
+          try {
+            // Asked first, while still inside the tap: browsers only show the
+            // permission prompt in response to a user gesture.
+            const permission = await Notification.requestPermission()
+            if (permission !== "granted") return this.liveSocket.execJS(this.el, this.el.dataset.unavailableHint)
+
+            const registration = await navigator.serviceWorker.register("/sw.js")
+            await navigator.serviceWorker.ready
+            const subscription =
+              (await registration.pushManager.getSubscription()) ||
+              (await registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: keyBytes(this.el.dataset.vapidKey),
+              }))
+
+            this.pushEvent("push_follow", {
+              subscription: subscription.toJSON(),
+              user_agent: navigator.userAgent.slice(0, 255),
+            })
+          } catch (_) {
+            this.liveSocket.execJS(this.el, this.el.dataset.unavailableHint)
+          }
+        },
+      }
+    </script>
+    """
+  end
+
+  defp bell_class(following?) do
+    [
+      "grid size-11 place-items-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+      if(following?, do: "bg-info text-info-content", else: "bg-ink/[0.06] text-ink")
+    ]
+  end
+
+  attr :group, :map, required: true
+
+  defp push_sheets(assigns) do
+    ~H"""
+    <.bottom_sheet
+      id="push-login-sheet"
+      title="Entre pra receber avisos"
+      description="Quando sair rolê novo nesse grupo, a gente te avisa no celular — mesmo com o app fechado. Pra isso, entra na sua conta."
+    >
+      <div class="space-y-2">
+        <a
+          id="push-login-github"
+          href={"/auth/github?" <> URI.encode_query(return_to: ~p"/g/#{@group.slug}")}
+          class="flex w-full items-center justify-center gap-2 rounded-cta bg-ink px-4 py-3.5 text-[14px] font-bold text-ink-content"
+        >
+          <.icon name="tabler-brand-github" class="size-[18px]" /> Entrar com GitHub
+        </a>
+        <.link
+          id="push-login-email"
+          navigate={~p"/entrar?#{[return_to: ~p"/g/#{@group.slug}"]}"}
+          class="flex w-full items-center justify-center gap-2 rounded-cta bg-ink/[0.06] px-4 py-3.5 text-[14px] font-bold text-ink"
+        >
+          <.icon name="tabler-mail" class="size-[18px]" /> Entrar com e-mail
+        </.link>
+      </div>
+    </.bottom_sheet>
+
+    <.bottom_sheet
+      id="push-ios-sheet"
+      title="Adicione à tela inicial"
+      description="No iPhone, os avisos só chegam pelo app na tela inicial."
+    >
+      <ol class="list-decimal space-y-1.5 pl-5 text-[13px] leading-relaxed">
+        <li>
+          Toque em
+          <.icon name="tabler-square-arrow-up" class="inline-block size-4 align-text-bottom" />
+          Compartilhar no Safari.
+        </li>
+        <li>Escolha <span class="font-semibold">Adicionar à Tela de Início</span>.</li>
+        <li>Abra o Rolezinho pelo ícone novo e toque no sininho de novo.</li>
+      </ol>
+    </.bottom_sheet>
+
+    <.bottom_sheet
+      id="push-unavailable-sheet"
+      title="Avisos indisponíveis"
+      description="Este navegador não permitiu notificações. Libere as notificações do site nas configurações do navegador e toque no sininho de novo."
+    />
+    """
   end
 end

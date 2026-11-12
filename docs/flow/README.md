@@ -41,6 +41,7 @@ skill does it automatically).
 
 | Flow | Type | Doc |
 | --- | --- | --- |
+| Group notifications | Transactional flow | [group-notifications.md](group-notifications.md) |
 | Home page | Screen/listing | [home-page.md](home-page.md) |
 | Split method (Método de separação) | Transactional flow | [split-method.md](split-method.md) |
 

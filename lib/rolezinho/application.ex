@@ -24,6 +24,7 @@ defmodule Rolezinho.Application do
       Rolezinho.Repo,
       {DNSCluster, query: Application.get_env(:rolezinho, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Rolezinho.PubSub},
+      {Oban, Application.fetch_env!(:rolezinho, Oban)},
       # Start a worker by calling: Rolezinho.Worker.start_link(arg)
       # {Rolezinho.Worker, arg},
       # Start to serve requests, typically the last entry

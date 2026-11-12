@@ -1,6 +1,14 @@
 import Config
 
 # Configure your database
+# Development-only VAPID keys for Web Push. Production reads its own from the
+# environment (config/runtime.exs) and refuses to boot without them.
+config :web_push_elixir,
+  vapid_public_key:
+    "BLd5cYV-8o2FwWfhd-vkBh3JHKaDlWMWUvZ_R58fAm_EcebXe9qHDwjXBYBLeK6hqukc9jSTx0gGienAH8lqbDg",
+  vapid_private_key: "BpMR_2wqTJQ0t4LAbsASowK83ATDfqowPRZ5oMZyhmM",
+  vapid_subject: "mailto:dev@rolezinho.local"
+
 config :rolezinho, Rolezinho.Repo,
   username: "postgres",
   password: "postgres",

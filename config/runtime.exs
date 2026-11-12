@@ -66,6 +66,20 @@ if config_env() == :prod do
     It's needed for the sign-in flow that gates /criar and /g/criar (ADR-0002).
     """
 
+  # Web Push (group notifications). The private key signs every push request;
+  # a deploy without it would silently send nothing, so fail at boot.
+  # Generate a pair with `mix generate.vapid.keys`.
+  config :web_push_elixir,
+    vapid_public_key:
+      System.get_env("VAPID_PUBLIC_KEY") ||
+        raise("environment variable VAPID_PUBLIC_KEY is missing (Web Push)."),
+    vapid_private_key:
+      System.get_env("VAPID_PRIVATE_KEY") ||
+        raise("environment variable VAPID_PRIVATE_KEY is missing (Web Push)."),
+    vapid_subject:
+      System.get_env("VAPID_SUBJECT") ||
+        raise("environment variable VAPID_SUBJECT is missing (Web Push, e.g. mailto:you@x).")
+
   database_url =
     System.get_env("DATABASE_URL") ||
       raise """

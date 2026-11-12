@@ -8,6 +8,17 @@ config :rolezinho,
 # The MIX_TEST_PARTITION environment variable can be used
 # to provide built-in test partitioning in CI environment.
 # Run `mix help test` for more information.
+# Jobs are asserted on, not run, unless a test drains a queue explicitly.
+config :rolezinho, Oban, testing: :manual
+
+config :rolezinho, :pusher, Rolezinho.Notifications.TestPusher
+
+config :web_push_elixir,
+  vapid_public_key:
+    "BIlLWlxXcTKR5JvQTO07d5sq341XRvhgpGz2Qqi3NhHD0RjSKoi4mR5qHC-fqVuXsMI0RsObG_-d3nz6UEfuylg",
+  vapid_private_key: "k7ehG-yMHBjEQK-uFFPBZlRdTAncEob2YvioQVPhDI8",
+  vapid_subject: "mailto:test@rolezinho.local"
+
 config :rolezinho, Rolezinho.Repo,
   username: "postgres",
   password: "postgres",

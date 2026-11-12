@@ -27,3 +27,4 @@ turns into "why was it done this way?" months later.
 | 0001 | Event password stored in plaintext | [0001-event-password-stored-in-plaintext.md](0001-event-password-stored-in-plaintext.md) |
 | 0002 | Accounts for creation only, via GitHub | [0002-accounts-for-creation-only.md](0002-accounts-for-creation-only.md) |
 | 0003 | Settle-up payment plan: integer cents, largest-first matching, always derived | [0003-settle-up-payment-plan.md](0003-settle-up-payment-plan.md) |
+| 0004 | Self-hosted Web Push, delivered through Oban, for group notifications | [0004-web-push-for-group-notifications.md](0004-web-push-for-group-notifications.md) |

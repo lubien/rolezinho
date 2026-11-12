@@ -106,4 +106,16 @@ config :phoenix, :json_library, Jason
 
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
+# Background jobs. The `push` queue sends Web Push notifications to group
+# followers (`Rolezinho.Notifications`); the pruner keeps finished jobs from
+# piling up in `oban_jobs`.
+config :rolezinho, Oban,
+  repo: Rolezinho.Repo,
+  queues: [push: 10],
+  plugins: [{Oban.Plugins.Pruner, max_age: 60 * 60 * 24 * 7}]
+
+# Which `Rolezinho.Notifications.Pusher` delivers push messages. Tests swap in
+# an in-memory one.
+config :rolezinho, :pusher, Rolezinho.Notifications.WebPush
+
 import_config "#{config_env()}.exs"

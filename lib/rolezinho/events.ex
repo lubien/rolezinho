@@ -314,6 +314,9 @@ defmodule Rolezinho.Events do
       case Repo.insert(changeset) do
         {:ok, event} ->
           broadcast_home()
+          # Followers of the group hear about it if it was born visible;
+          # a hidden one is announced when it is un-hidden (`set_hidden/2`).
+          Rolezinho.Notifications.announce_event(event)
           {:ok, event}
 
         {:error, changeset} ->
@@ -680,6 +683,8 @@ defmodule Rolezinho.Events do
       {:ok, updated} ->
         broadcast(updated)
         broadcast_home()
+        # Un-hiding is "posting" for a rolê that was prepared out of sight.
+        if not hidden?, do: Rolezinho.Notifications.announce_event(updated)
         {:ok, updated}
 
       {:error, changeset} ->

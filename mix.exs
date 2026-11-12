@@ -73,6 +73,8 @@ defmodule Rolezinho.MixProject do
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
       {:html_sanitize_ex, "~> 1.5"},
+      {:oban, "~> 2.19"},
+      {:web_push_elixir, "~> 0.8.0"},
       {:earmark, "~> 1.4"},
       {:eqrcode, "~> 0.1"},
       # Auth: creation surfaces require GitHub sign-in per ADR-0002. Ueberauth
