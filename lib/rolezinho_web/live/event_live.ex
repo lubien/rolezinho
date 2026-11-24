@@ -42,7 +42,8 @@ defmodule RolezinhoWeb.EventLive do
        |> assign(:editing_main, nil)
        |> assign(:editing_wait, nil)
        |> assign(:expanded_rows, MapSet.new())
-       |> assign(:confirming_removal, nil)}
+       |> assign(:confirming_removal, nil)
+       |> assign(:guest_form_key, 0)}
     else
       # Password-protected group we haven't unlocked yet: send the
       # visitor to the group page (SECURITY.md §3) so they enter the
@@ -286,12 +287,18 @@ defmodule RolezinhoWeb.EventLive do
       current_user_id: user_id
     ]
 
-    can_join? =
-      unlocked? and
-        Policy.can_join?(event, opts) and
-        is_nil(own_row_index(event, participant_id, user_id)) and
-        is_nil(own_wait_index(event, participant_id, user_id)) and
-        (not Event.main_full?(event) or event.wait_enabled)
+    has_room? = not Event.main_full?(event) or event.wait_enabled
+
+    owns_row? =
+      not is_nil(own_row_index(event, participant_id, user_id)) or
+        not is_nil(own_wait_index(event, participant_id, user_id))
+
+    can_join? = unlocked? and Policy.can_join?(event, opts) and not owns_row? and has_room?
+
+    # Someone already on the list adds other people under their own identity —
+    # same rows a party join creates, so they can mark them paid or take them
+    # off. Re-checked in `handle_event("add_guest", ...)`.
+    can_add_guests? = unlocked? and Policy.can_join?(event, opts) and owns_row? and has_room?
 
     # RN-31: promoting is the organizer's call. The button used to render for
     # every visitor, which put a decision that reorders the list in the hands of
@@ -300,6 +307,7 @@ defmodule RolezinhoWeb.EventLive do
     socket
     |> assign(:can_promote?, Policy.can_promote?(event, opts))
     |> assign(:can_join?, can_join?)
+    |> assign(:can_add_guests?, can_add_guests?)
     |> assign(:can_edit_event?, Policy.can_edit?(event, opts))
     |> assign(:confirmed_names, confirmed_names(event, unlocked?))
     |> assign(:party_room, party_room(event))
@@ -881,6 +889,34 @@ defmodule RolezinhoWeb.EventLive do
   # RN-31. `ensure_can_signup` only reports whether the password was entered, so
   # it does not answer this: promoting reorders who is in the rolê, and any
   # unlocked visitor could send this message without ever seeing a button.
+  # Adding someone else after you joined. The button only renders for people
+  # who own a row, but the event can be sent by anyone, so the same check runs
+  # here before anything is written.
+  def handle_event("add_guest", %{"name" => name}, socket) do
+    %{event: event, participant_id: participant_id} = socket.assigns
+    user_id = socket.assigns[:current_user_id]
+
+    with true <- socket.assigns.can_add_guests?,
+         {:ok, updated, placed} <-
+           Events.add_party(event, name, 1, participant_id: participant_id, user_id: user_id) do
+      {:noreply,
+       socket
+       |> assign_event(updated)
+       |> update(:guest_form_key, &(&1 + 1))
+       |> put_flash(:info, guest_added_message(String.trim(name), placed))}
+    else
+      false ->
+        {:noreply, socket}
+
+      {:error, :empty_name} ->
+        {:noreply, put_flash(socket, :error, "Escreve o nome de quem vai entrar.")}
+
+      {:error, _reason} ->
+        {:noreply,
+         put_flash(socket, :error, "Não deu pra adicionar agora. A lista pode ter fechado.")}
+    end
+  end
+
   def handle_event("promote", %{"index" => index}, socket) do
     with :ok <- ensure_can_signup(socket),
          :ok <- ensure_can_promote(socket),
@@ -1248,6 +1284,17 @@ defmodule RolezinhoWeb.EventLive do
       current_user={@current_user}
       page_title={@page_title}
     >
+      <:action :if={@can_add_guests?}>
+        <button
+          type="button"
+          id="add-guest-btn"
+          phx-click={BottomSheet.show("add-guest-sheet")}
+          class="mx-auto flex w-full max-w-[36rem] items-center justify-center gap-2 rounded-cta bg-base-100 px-4 py-4 text-[15px] font-bold text-ink shadow-cta ring-1 ring-hairline transition-transform active:scale-[.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        >
+          <.icon name="tabler-user-plus" class="size-[18px]" /> Adicionar mais pessoas
+        </button>
+      </:action>
+
       <:action :if={@can_join?}>
         <button
           type="button"
@@ -1772,6 +1819,44 @@ defmodule RolezinhoWeb.EventLive do
             Compartilhar
           </button>
         </:actions>
+      </.bottom_sheet>
+
+      <!-- Same rule as the join sheet below: only rendered when the viewer may
+           actually add someone, so there is no form to submit otherwise. -->
+      <.bottom_sheet
+        :if={@can_add_guests?}
+        id="add-guest-sheet"
+        title="Adicionar mais pessoas"
+        description="Quem você adicionar fica com você: dá pra marcar o pagamento ou tirar da lista depois."
+      >
+        <form
+          id={"add-guest-form-#{@guest_form_key}"}
+          phx-submit="add_guest"
+          class="flex items-stretch gap-2"
+        >
+          <div class="min-w-0 flex-1">
+            <.input
+              id={"add-guest-name-#{@guest_form_key}"}
+              name="name"
+              value=""
+              placeholder="Nome de quem vai"
+              autocomplete="off"
+              maxlength="60"
+              aria-label="Nome de quem vai"
+            />
+          </div>
+          <button
+            type="submit"
+            class="mb-2 shrink-0 rounded-row bg-ink px-4 text-xs font-bold text-ink-content"
+          >
+            Adicionar
+          </button>
+        </form>
+        <p class="text-[11px] text-muted">
+          {if Event.main_full?(@event),
+            do: "A lista principal está cheia: entra na espera.",
+            else: "Adicione uma pessoa por vez."}
+        </p>
       </.bottom_sheet>
 
       <!-- Rendered only when joining is actually allowed. A sheet that exists
@@ -2386,4 +2471,7 @@ defmodule RolezinhoWeb.EventLive do
       "[&_a]:underline [&_a]:underline-offset-2"
     ]
   end
+
+  defp guest_added_message(name, %{main: main}) when main > 0, do: "#{name} entrou na lista."
+  defp guest_added_message(name, _placed), do: "#{name} entrou na espera."
 end
