@@ -40,15 +40,15 @@ defmodule Rolezinho.MixProject do
   # Type `mix help deps` for examples and options.
   defp deps do
     [
-      {:phoenix, "~> 1.8.9"},
+      {:phoenix, "~> 1.8.17"},
       {:phoenix_ecto, "~> 4.5"},
       {:ecto_sql, "~> 3.13"},
       {:postgrex, ">= 0.0.0"},
-      {:phoenix_html, "~> 4.1"},
+      {:phoenix_html, "~> 4.4"},
       {:phoenix_live_reload, "~> 1.2", only: :dev},
-      {:phoenix_live_view, "~> 1.2.0"},
+      {:phoenix_live_view, "~> 1.2.15"},
       {:lazy_html, ">= 0.1.0", only: :test},
-      {:phoenix_live_dashboard, "~> 0.8.3"},
+      {:phoenix_live_dashboard, "~> 0.9.1"},
       {:phoenix_storybook, "~> 1.3"},
       {:esbuild, "~> 0.10", runtime: Mix.env() == :dev},
       {:tailwind, "~> 0.5", runtime: Mix.env() == :dev},
@@ -69,13 +69,13 @@ defmodule Rolezinho.MixProject do
       # Password hashing for local (username + senha) auth alongside the
       # GitHub OAuth path. See ADR-0002 for the rationale of adding a
       # second identity provider.
-      {:bcrypt_elixir, "~> 3.0"},
-      {:dns_cluster, "~> 0.2.0"},
-      {:bandit, "~> 1.5"},
+      {:bcrypt_elixir, "~> 4.0"},
+      {:dns_cluster, "~> 0.3.1"},
+      {:bandit, "~> 1.15"},
       {:html_sanitize_ex, "~> 1.5"},
       {:oban, "~> 2.19"},
       {:web_push_elixir, "~> 0.8.0"},
-      {:earmark, "~> 1.4"},
+      {:mdex, "~> 0.14"},
       {:eqrcode, "~> 0.1"},
       # Auth: creation surfaces require GitHub sign-in per ADR-0002. Ueberauth
       # is the canonical Elixir OAuth wrapper; the GitHub strategy is the

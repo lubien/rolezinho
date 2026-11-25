@@ -154,8 +154,8 @@ end
 ## Rendering user content
 
 An event's markdown is user-written and rendered with `raw(...)`. The invariant that
-prevents XSS (`escape: true` in Earmark) and the rendering rules live in
-`SECURITY.md`, section 1 — **read it before adding any `raw(...)`**.
+prevents XSS (`escape: true` in MDEx plus the allowlist sanitizer) and the rendering
+rules live in `SECURITY.md`, section 1 — **read it before adding any `raw(...)`**.
 
 ## The three outputs
 

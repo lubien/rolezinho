@@ -1,12 +1,12 @@
 defmodule RolezinhoWeb.MarkdownXssTest do
   @moduledoc """
-  Regression tests for EEF-CVE-2026-48591: Earmark 1.4.x interpolates link and image
-  URLs into `href`/`src` attributes without escaping double quotes, so a crafted link
-  closes the attribute and injects an event handler.
+  Attribute-injection regression tests (the EEF-CVE-2026-48591 class): a link or image
+  URL or title containing a double quote must never close its attribute and inject an
+  event handler.
 
   The rendered markdown reaches the page through `raw(...)`, and writes to an event are
-  anonymous, so any visitor can reach this. Earmark is retired with no patched release;
-  the mitigation lives in `RolezinhoWeb.Markdown.render/1`.
+  anonymous, so any visitor can reach this. The protection lives in
+  `RolezinhoWeb.Markdown.render/1`.
   """
   use RolezinhoWeb.ConnCase, async: false
 

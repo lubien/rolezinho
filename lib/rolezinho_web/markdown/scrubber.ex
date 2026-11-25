@@ -8,7 +8,7 @@ defmodule RolezinhoWeb.Markdown.Scrubber do
   make every visitor's browser request a same-origin URL. Links keep `href` only for `http`, `https`, and `mailto`,
   plus the exact `target`/`rel` pair `RolezinhoWeb.Markdown` adds. Everything
   else — `<script>`, `<iframe>`, `<form>`, `<div style=…>` — is stripped,
-  whatever Earmark let through.
+  whatever the renderer let through.
   """
 
   use HtmlSanitizeEx, extend: :strip_tags

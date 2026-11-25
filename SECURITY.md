@@ -130,30 +130,28 @@ rendered via `raw(...)` in `RolezinhoWeb.EventLive`. Every one of those goes thr
 a single function, `RolezinhoWeb.Markdown.render/1`, which runs four steps in order:
 
 1. WhatsApp markup becomes markdown (`Rolezinho.Event.WhatsMarkup`).
-2. `"` becomes `&quot;`. Earmark 1.4.x writes link and image URLs and titles
-   straight into attributes without escaping quotes, so
-   `[x](http://a/?b=c" onerror="alert(1))` would otherwise close the attribute and
-   inject a handler (EEF-CVE-2026-48591; the package is retired and no patched
-   release is coming).
-3. Earmark renders with `escape: true`. Links get `target="_blank"` and
-   `rel="noopener noreferrer nofollow"`; a link whose scheme isn't `http`, `https`, or
-   `mailto` is reduced to its text.
+2. MDEx parses and renders it with `escape: true` (and `unsafe: false`). Any raw HTML
+   the author typed — inline or as a block at the start of a line (`<script>`,
+   `<iframe>`, `<div style=…>`) — comes out as escaped, visible text, and link and
+   image URLs and titles are attribute-escaped, so
+   `[x](http://a/?b=c" onerror="alert(1))` cannot close the attribute.
+3. A link whose scheme isn't `http`, `https`, or `mailto` is reduced to its text;
+   every remaining link gets `target="_blank"` and `rel="noopener noreferrer nofollow"`.
 4. The HTML goes through an allowlist sanitizer, `RolezinhoWeb.Markdown.Scrubber`
    (`html_sanitize_ex`): only the tags markdown produces survive, with no styling or
    event attributes, `href` limited to `http`/`https`/`mailto`, and no images.
 
-`escape: true` alone is **not** enough: it escapes HTML inside a paragraph, but a line
-that starts with `<` is an HTML block, which Earmark passes through raw (`<script>`,
-`<iframe>`, `<form>`, `<div style=…>`). The sanitizer is what guarantees nothing
-outside the allowlist reaches the page. `markdown_test.exs` covers the HTML-block,
-scheme, and link vectors; `markdown_xss_test.exs` covers the quote vectors (URL, image
-URL, and link title).
+The renderer's escaping and the sanitizer are independent layers: the sanitizer is
+what guarantees nothing outside the allowlist reaches the page even if a rendering
+option changes. `markdown_test.exs` covers the HTML-block, scheme, link, and
+attribute-injection vectors; `markdown_xss_test.exs` covers the quote vectors (URL,
+image URL, and link title) end to end.
 
 Rules:
 
-- Never change `escape: true` to `false`, remove the quote replacement, or skip the
-  sanitizer — each covers a hole the others don't.
-- Do not introduce a second markdown rendering path. Never call Earmark outside
+- Never change `escape: true` to `false`, set `unsafe: true`, or skip the sanitizer —
+  each covers a hole the others don't.
+- Do not introduce a second markdown rendering path. Never call MDEx outside
   `RolezinhoWeb.Markdown`; reuse `render/1`.
 - Widening the allowlist (a new tag or attribute in `Scrubber`) is a security change:
   justify it and add a test for it.
