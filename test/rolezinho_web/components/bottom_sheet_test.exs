@@ -42,4 +42,15 @@ defmodule RolezinhoWeb.Components.UI.BottomSheetTest do
              _ -> false
            end)
   end
+
+  test "opening a sheet hides the layout's action bar; closing brings it back" do
+    %Phoenix.LiveView.JS{ops: show_ops} = BottomSheet.show("demo")
+    %Phoenix.LiveView.JS{ops: hide_ops} = BottomSheet.hide("demo")
+
+    assert ["add_class", %{names: ["hidden"], to: "#app-action-bar"}] =
+             Enum.find(show_ops, &match?(["add_class", _], &1))
+
+    assert ["remove_class", %{names: ["hidden"], to: "#app-action-bar"}] =
+             Enum.find(hide_ops, &match?(["remove_class", _], &1))
+  end
 end

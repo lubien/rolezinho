@@ -107,9 +107,14 @@ defmodule RolezinhoWeb.Components.UI.BottomSheet do
     """
   end
 
-  @doc "Shows the sheet with the given id."
+  @doc """
+  Shows the sheet with the given id, and hides the layout's bottom action bar
+  (`#app-action-bar`) while it is open — some mobile browsers paint the bar
+  over the sheet's own buttons otherwise.
+  """
   def show(js \\ %JS{}, id) do
     js
+    |> JS.add_class("hidden", to: "#app-action-bar")
     |> JS.show(to: "##{id}")
     |> JS.show(
       to: "##{id}-panel",
@@ -120,9 +125,10 @@ defmodule RolezinhoWeb.Components.UI.BottomSheet do
     )
   end
 
-  @doc "Hides the sheet with the given id."
+  @doc "Hides the sheet with the given id and brings the action bar back."
   def hide(js \\ %JS{}, id) do
     js
+    |> JS.remove_class("hidden", to: "#app-action-bar")
     |> JS.hide(
       to: "##{id}-panel",
       transition: {"ease-in duration-200", "translate-y-0", "translate-y-full"}

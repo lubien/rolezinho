@@ -50,8 +50,12 @@ defmodule RolezinhoWeb.Layouts do
         </div>
       </main>
 
+      <%!-- Hidden while a bottom sheet is open (`BottomSheet.show/2`): on some
+           mobile browsers the bar paints over an open sheet's buttons no matter
+           the stacking order, so the sheet gets the bottom of the screen alone. --%>
       <div
         :if={@action != []}
+        id="app-action-bar"
         class="shrink-0 border-t border-hairline bg-canvas px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
       >
         <div class="mx-auto max-w-[420px] md:max-w-[52rem] xl:max-w-[72rem]">
