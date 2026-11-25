@@ -40,7 +40,11 @@ defmodule RolezinhoWeb.Layouts do
   def app(assigns) do
     ~H"""
     <div class="flex h-dvh flex-col bg-canvas">
-      <main class="flex-1 overflow-y-auto overscroll-contain px-5 pb-6 pt-[max(2rem,env(safe-area-inset-top))]">
+      <%!-- `relative z-10` puts everything rendered in the page — including the
+           fixed bottom sheets — in a stacking layer above the action bar below.
+           Without it, mobile browsers can paint the bar over an open sheet's
+           buttons, since the bar comes later in the DOM. --%>
+      <main class="relative z-10 flex-1 overflow-y-auto overscroll-contain px-5 pb-6 pt-[max(2rem,env(safe-area-inset-top))]">
         <div class="mx-auto max-w-[420px] md:max-w-[52rem] xl:max-w-[72rem]">
           {render_slot(@inner_block)}
         </div>
