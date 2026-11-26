@@ -11,6 +11,7 @@ fi
 # repo's .tool-versions; install those exact versions before calling mix.
 # Erlang may be compiled from source, which needs these headers.
 if command -v mise > /dev/null; then
+  sudo apt-get update -qq
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
     build-essential autoconf libncurses-dev libssl-dev
   mise install
