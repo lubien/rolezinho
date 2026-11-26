@@ -4,9 +4,6 @@
 # run repeatedly: it never wipes data the reviewer created.
 set -euxo pipefail
 
-# Sprite language runtimes live here; the step may not run in a login shell.
-export PATH="/.sprite/bin:$PATH"
-
 export MIX_ENV=dev
 export PORT="${PORT:-8080}"
 
