@@ -2,7 +2,10 @@
 # Start step for Fly.io PR previews (see preview.yml). Runs on every boot of
 # the preview Sprite, including wake-ups after it sleeps, so it must be safe to
 # run repeatedly: it never wipes data the reviewer created.
-set -euo pipefail
+set -euxo pipefail
+
+# Sprite language runtimes live here; the step may not run in a login shell.
+export PATH="/.sprite/bin:$PATH"
 
 export MIX_ENV=dev
 export PORT="${PORT:-8080}"

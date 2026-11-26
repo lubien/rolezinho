@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Build step for Fly.io PR previews (see preview.yml). Runs once per commit.
-set -euo pipefail
+set -euxo pipefail
+
+# Sprite language runtimes live here; the step may not run in a login shell.
+export PATH="/.sprite/bin:$PATH"
 
 if ! compgen -G "/usr/lib/postgresql/*/bin/postgres" > /dev/null; then
   sudo apt-get update -qq
