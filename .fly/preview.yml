@@ -1,0 +1,8 @@
+# Fly.io pull request previews. Each PR is built and run in its own private
+# Sprite; the Fly.io GitHub app comments the preview URL on the PR.
+# The Phoenix-specific steps live in the two scripts next to this file.
+build-command: bash .fly/preview-build.sh
+services:
+  web:
+    start: exec bash .fly/preview-start.sh
+    port: 8080
