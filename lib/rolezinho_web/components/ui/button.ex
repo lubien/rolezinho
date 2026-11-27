@@ -33,7 +33,9 @@ defmodule RolezinhoWeb.Components.UI.Button do
 
   attr :full_width, :boolean, default: true, doc: "false renders an inline button"
   attr :class, :any, default: nil
-  attr :rest, :global, include: ~w(href navigate patch method download name value disabled form)
+
+  attr :rest, :global,
+    include: ~w(href navigate patch method download name value disabled form type)
 
   slot :inner_block, required: true
 

@@ -37,6 +37,7 @@ defmodule RolezinhoWeb.PixKeyTypeFormTest do
     test "renders a select for pix_key_type with all five DICT options", %{conn: conn} do
       {conn, _} = signed_in(conn, "pix-form-creator")
       {:ok, view, _html} = live(conn, ~p"/criar")
+      view |> element("#new-event-add-payment") |> render_click()
 
       assert has_element?(view, ~s(select[name="event[pix_key_type]"]))
       # One <option> per DICT type + the empty prompt.

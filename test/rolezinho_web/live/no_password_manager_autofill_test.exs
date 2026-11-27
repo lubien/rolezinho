@@ -78,7 +78,8 @@ defmodule RolezinhoWeb.NoPasswordManagerAutofillTest do
   describe "Pix key" do
     test "on the event create form", %{conn: conn} do
       conn = signed_in_conn(conn)
-      {:ok, _view, html} = live(conn, ~p"/criar")
+      {:ok, view, _html} = live(conn, ~p"/criar")
+      html = view |> element("#new-event-add-payment") |> render_click()
 
       assert_all_ignore_attrs(html, ~S(event\[pix_key\]), "/criar")
     end

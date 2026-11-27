@@ -12,7 +12,8 @@ defmodule RolezinhoWeb.EventNewSlugAutofillTest do
     * The category text input carries a `list=` attribute pointing at a
       `<datalist>` with the four Portuguese suggestions, but stays a plain
       text input.
-    * The Link section is the last one on the form.
+    * The slug field lives in the collapsed Advanced card, and the payment
+      card opens on demand and resets its fields when closed.
   """
   use RolezinhoWeb.ConnCase, async: false
 
@@ -167,18 +168,80 @@ defmodule RolezinhoWeb.EventNewSlugAutofillTest do
   describe "form layout" do
     setup %{conn: conn} do
       conn = signed_in_conn(conn)
-      {:ok, _view, html} = live(conn, ~p"/criar")
-      %{html: html}
+      {:ok, view, _html} = live(conn, ~p"/criar")
+      %{view: view}
     end
 
-    test "the Link section is the last section on the form", %{html: html} do
-      # Pull the section headings in order and check "Link" is last.
-      headings =
-        Regex.scan(~r|<h2[^>]*>([^<]+)</h2>|, html)
-        |> Enum.map(fn [_, text] -> String.trim(text) end)
+    test "name and description share the first card", %{view: view} do
+      assert has_element?(view, ~s(#new-event-basics input[name="event[title]"]))
+      assert has_element?(view, ~s(#new-event-basics textarea[name="event[description]"]))
+    end
 
-      assert List.last(headings) == "Link",
-             "expected \"Link\" to be the last <h2>, got: #{inspect(headings)}"
+    test "location, date, time and category live in the optional card", %{view: view} do
+      for field <- ~w(local date time category) do
+        assert has_element?(view, ~s(#new-event-details input[name="event[#{field}]"]))
+      end
+    end
+
+    test "list limits, visibility, password and link live in Advanced", %{view: view} do
+      for field <- ~w(main_size wait_size auto_promote hidden access_code slug) do
+        assert has_element?(view, ~s(details#new-event-advanced [name="event[#{field}]"]))
+      end
+    end
+
+    test "Advanced starts collapsed and keeps the open state out of server patches",
+         %{view: view} do
+      refute has_element?(view, "details#new-event-advanced[open]")
+      assert has_element?(view, "details#new-event-advanced[phx-mounted]")
+    end
+  end
+
+  describe "payment card" do
+    setup %{conn: conn} do
+      conn = signed_in_conn(conn)
+      {:ok, view, _html} = live(conn, ~p"/criar")
+      %{view: view}
+    end
+
+    test "starts closed, with only the add button", %{view: view} do
+      assert has_element?(view, "#new-event-add-payment")
+      refute has_element?(view, "#new-event-payment")
+      refute has_element?(view, ~s(input[name="event[pix_key]"]))
+    end
+
+    test "the add button opens the card with the payment fields", %{view: view} do
+      view |> element("#new-event-add-payment") |> render_click()
+
+      assert has_element?(view, ~s(#new-event-payment select[name="event[split_method]"]))
+      assert has_element?(view, ~s(#new-event-payment select[name="event[pix_key_type]"]))
+      assert has_element?(view, ~s(#new-event-payment input[name="event[pix_key]"]))
+      refute has_element?(view, "#new-event-add-payment")
+    end
+
+    test "closing the card resets its fields and keeps the rest", %{view: view} do
+      view |> element("#new-event-add-payment") |> render_click()
+
+      render_change(view, "validate", %{
+        "_target" => ["event", "pix_key"],
+        "event" => %{
+          "title" => "Churras",
+          "main_size" => "30",
+          "split_method" => "total_split",
+          "total" => "300",
+          "pix_key_type" => "email",
+          "pix_key" => "ana@example.com"
+        }
+      })
+
+      view |> element("#new-event-remove-payment") |> render_click()
+      refute has_element?(view, "#new-event-payment")
+
+      view |> element("#new-event-add-payment") |> render_click()
+
+      refute has_element?(view, ~s(input[name="event[pix_key]"][value="ana@example.com"]))
+      refute has_element?(view, ~s(input[name="event[total]"]))
+      assert has_element?(view, ~s(input[name="event[title]"][value="Churras"]))
+      assert has_element?(view, ~s(input[name="event[main_size]"][value="30"]))
     end
   end
 end

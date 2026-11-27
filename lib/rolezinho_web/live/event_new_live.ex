@@ -36,6 +36,9 @@ defmodule RolezinhoWeb.EventNewLive do
        # user has typed into the slug field themselves, this flips to true and
        # the field belongs to them from then on.
        |> assign(:slug_touched?, false)
+       # The payment card starts closed: most rolês are free or settled
+       # outside the app, so the form only asks for money when asked to.
+       |> assign(:payment_open?, false)
        |> assign(:category_suggestions, @category_suggestions)
        |> assign_form(default_params(group_slug), %{})}
     end
@@ -52,22 +55,30 @@ defmodule RolezinhoWeb.EventNewLive do
       "category" => "",
       "date" => "",
       "time" => "",
-      "split_method" => "per_person",
-      "price" => "",
-      "total" => "",
-      "pix_key" => "",
       "description" => "",
       "main_size" => "18",
       "wait_size" => "3",
       "auto_promote" => "false",
       "access_code" => "",
-      "pix_key_type" => "",
       # Not-hidden by default for a signed-in creator (they can see their
       # own hidden rolezinhos on the home too now, but the safest default
       # is still "visible"). The context has its own anonymous-safety
       # override for callers without a user id.
       "hidden" => "false",
       "group" => group_slug
+    }
+    |> Map.merge(payment_defaults())
+  end
+
+  # The fields owned by the payment card. Closing the card puts these back,
+  # so "no payment" really submits no price and no Pix key.
+  defp payment_defaults do
+    %{
+      "split_method" => "per_person",
+      "price" => "",
+      "total" => "",
+      "pix_key_type" => "",
+      "pix_key" => ""
     }
   end
 
@@ -105,6 +116,20 @@ defmodule RolezinhoWeb.EventNewLive do
      socket
      |> assign(:slug_touched?, slug_touched?)
      |> assign_form(params, %{})}
+  end
+
+  def handle_event("open_payment", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:payment_open?, true)
+     |> assign_form(Map.merge(socket.assigns.form_params, payment_defaults()), %{})}
+  end
+
+  def handle_event("close_payment", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:payment_open?, false)
+     |> assign_form(Map.merge(socket.assigns.form_params, payment_defaults()), %{})}
   end
 
   # Derives the slug from the current title (plus `-dd-mm` when a date is
@@ -212,7 +237,15 @@ defmodule RolezinhoWeb.EventNewLive do
             </p>
           </div>
 
-          <section class="rounded-card border border-hairline bg-base-100 p-4 shadow-card">
+          <!--
+            The name is the only thing the form asks for. Every other card
+            either starts with a working default or is optional, so someone
+            can type a name and hit "Criar rolezinho".
+          -->
+          <section
+            id="new-event-basics"
+            class="rounded-card border border-hairline bg-base-100 p-4 shadow-card"
+          >
             <h2 class="text-[13px] font-extrabold">O rolê</h2>
 
             <div class="mt-3.5 space-y-3">
@@ -222,7 +255,47 @@ defmodule RolezinhoWeb.EventNewLive do
                 placeholder="ex.: Vôlei ver-o-beach"
                 required
               />
+              <div>
+                <.input
+                  field={@form[:description]}
+                  type="textarea"
+                  label="Recado pro grupo"
+                  placeholder="O que levar, onde estacionar, qualquer coisa que ajude."
+                  rows="2"
+                  data-autogrow
+                />
+                <!-- The syntax is the group's own, so the hint names it rather than
+                     teaching markdown: someone who formats messages already knows
+                     this and does not need to be told it is markdown. -->
+                <p class="mt-1 text-[11px] text-muted">
+                  Dá pra usar <code class="font-mono font-bold">*negrito*</code>,
+                  <code class="font-mono italic">_itálico_</code>
+                  e <code class="font-mono line-through">~riscado~</code>, como no WhatsApp.
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <section
+            id="new-event-details"
+            class="mt-3 rounded-card border border-hairline bg-base-100 p-4 shadow-card"
+          >
+            <div class="flex items-baseline justify-between gap-2">
+              <h2 class="text-[13px] font-extrabold">Onde e quando</h2>
+              <span class="rounded-full bg-tint px-2 py-0.5 text-[11px] font-semibold text-muted">
+                Opcional
+              </span>
+            </div>
+            <p class="mt-0.5 text-[11px] text-muted">
+              Pode deixar em branco e preencher depois.
+            </p>
+
+            <div class="mt-3.5 space-y-3">
               <.input field={@form[:local]} label="Onde" placeholder="ex.: Rua Caripunas" />
+              <div class="grid grid-cols-2 gap-2">
+                <.input field={@form[:date]} type="date" label="Quando" />
+                <.input field={@form[:time]} type="time" label="Que horas" />
+              </div>
               <!--
                 Category stays a free-form text field — the datalist below is
                 only there as a hint on desktop and a suggestion sheet on
@@ -238,39 +311,53 @@ defmodule RolezinhoWeb.EventNewLive do
               <datalist id="event-category-suggestions">
                 <option :for={suggestion <- @category_suggestions} value={suggestion} />
               </datalist>
-
-              <div class="grid grid-cols-2 gap-2">
-                <.input field={@form[:date]} type="date" label="Quando" />
-                <.input field={@form[:time]} type="time" label="Que horas" />
-              </div>
             </div>
           </section>
 
-          <section class="mt-3 rounded-card border border-hairline bg-base-100 p-4 shadow-card">
-            <h2 class="text-[13px] font-extrabold">Rateio</h2>
-            <p class="mt-0.5 text-[11px] text-muted">
-              Deixe em branco se o rolê for de graça.
-            </p>
+          <.action_button
+            :if={not @payment_open?}
+            id="new-event-add-payment"
+            type="button"
+            variant="outline"
+            phx-click="open_payment"
+            class="mt-3"
+          >
+            <.icon name="tabler-plus" class="size-[18px]" /> Adicionar pagamento
+          </.action_button>
+
+          <!--
+            Closing this card means "no payment": `close_payment` resets every
+            field in it, and the fields leave the DOM, so the submit carries no
+            price and no Pix key.
+          -->
+          <section
+            :if={@payment_open?}
+            id="new-event-payment"
+            class="mt-3 rounded-card border border-hairline bg-base-100 p-4 shadow-card"
+          >
+            <div class="flex items-start justify-between gap-2">
+              <div>
+                <h2 class="text-[13px] font-extrabold">Pagamento</h2>
+                <p class="mt-0.5 text-[11px] text-muted">
+                  Como dividir a conta e pra onde mandar o Pix.
+                </p>
+              </div>
+              <.icon_button
+                id="new-event-remove-payment"
+                name="tabler-x"
+                label="Remover pagamento"
+                phx-click="close_payment"
+                class="-mr-2 -mt-2"
+              />
+            </div>
 
             <div class="mt-3.5 space-y-3">
               <.split_method_fields form={@form} />
               <!--
-                Password managers keep misidentifying this field as a
-                password because it sits near the "Senha" section and holds
-                an opaque-looking string. It is not a password: it is a
-                public Pix key someone pastes so friends can send money.
-                `autocomplete="off"` + the three vendor-specific ignore
-                data-attrs (1Password / LastPass / Bitwarden) tell every
-                mainstream manager to stay out. There is no HTML autocomplete
-                token specific to Pix — the key can be a phone, email, CPF,
-                CNPJ or random UUID, so no single browser hint fits.
-              -->
-              <!--
                 Explicit type: an 11-digit number is ambiguous (phone OR CPF),
                 so we ask the organizer which one it is instead of guessing.
-                The old guesser defaulted to CPF, which produced a valid-
-                looking QR that scanned and failed. Placed *before* the key
-                input so the choice frames what the field expects.
+                Placed *before* the key input so the choice frames what the
+                field expects.
               -->
               <.input
                 field={@form[:pix_key_type]}
@@ -283,6 +370,14 @@ defmodule RolezinhoWeb.EventNewLive do
                   end)
                 }
               />
+              <!--
+                Password managers keep misidentifying this field as a
+                password. It is not a password: it is a public Pix key
+                someone pastes so friends can send money.
+                `autocomplete="off"` + the three vendor-specific ignore
+                data-attrs (1Password / LastPass / Bitwarden) tell every
+                mainstream manager to stay out.
+              -->
               <.input
                 field={@form[:pix_key]}
                 label="Chave Pix"
@@ -296,113 +391,131 @@ defmodule RolezinhoWeb.EventNewLive do
             </div>
           </section>
 
-          <section class="mt-3 rounded-card border border-hairline bg-base-100 p-4 shadow-card">
-            <h2 class="text-[13px] font-extrabold">Vagas</h2>
-
-            <div class="mt-3.5 grid grid-cols-2 gap-2">
-              <.input
-                field={@form[:main_size]}
-                type="number"
-                label="Na lista"
-                min="1"
-                max="500"
-                required
-              />
-              <.input field={@form[:wait_size]} type="number" label="Na espera" min="0" max="100" />
-            </div>
-            <p class="mt-2 text-[11px] text-muted">
-              0 na espera desliga a fila. Depois de criada, ela não tem limite.
-            </p>
-            <div class="mt-3">
-              <.input
-                field={@form[:auto_promote]}
-                type="checkbox"
-                label="Promover automaticamente da reserva"
-              />
-              <p class="-mt-1 text-[11px] text-muted">
-                Quando alguém sair da lista, o próximo da reserva entra sozinho.
-              </p>
-            </div>
-          </section>
-
-          <section class="mt-3 rounded-card border border-hairline bg-base-100 p-4 shadow-card">
-            <h2 class="text-[13px] font-extrabold">Visibilidade</h2>
-            <p class="mt-0.5 text-[11px] text-muted">
-              Oculto não aparece na home. Só quem tem o link entra.
-            </p>
-
-            <label class="mt-3.5 flex items-center gap-2 text-[13px]">
-              <input
-                type="checkbox"
-                name="event[hidden]"
-                value="true"
-                checked={@form[:hidden].value in [true, "true", "on"]}
-                class="size-4 rounded border-ink/30 text-accent focus:ring-accent"
-              />
-              <span class="font-bold">Oculto</span>
-            </label>
-          </section>
-
-          <section class="mt-3 rounded-card border border-hairline bg-base-100 p-4 shadow-card">
-            <h2 class="text-[13px] font-extrabold">Senha</h2>
-            <p class="mt-0.5 text-[11px] text-muted">
-              Em branco, qualquer um com o link entra. Com senha, o link sozinho não basta.
-            </p>
-
-            <div class="mt-3.5">
-              <.input
-                field={@form[:access_code]}
-                label="Senha da lista"
-                {RolezinhoWeb.AccessCodeField.ignore_attrs()}
-              />
-            </div>
-          </section>
-
-          <section class="mt-3 rounded-card border border-hairline bg-base-100 p-4 shadow-card">
-            <h2 class="text-[13px] font-extrabold">Recado pro grupo</h2>
-            <p class="mt-0.5 text-[11px] leading-relaxed text-muted">
-              O que levar, onde estacionar, qualquer coisa que ajude. Aparece na página do rolê.
-            </p>
-
-            <div class="mt-3.5">
-              <.input field={@form[:description]} type="textarea" rows="2" data-autogrow />
-            </div>
-
-            <!-- The syntax is the group's own, so the hint names it rather than
-                 teaching markdown: someone who formats messages already knows
-                 this and does not need to be told it is markdown. -->
-            <p class="mt-2 text-[11px] text-muted">
-              Dá pra usar <code class="font-mono font-bold">*negrito*</code>,
-              <code class="font-mono italic">_itálico_</code>
-              e <code class="font-mono line-through">~riscado~</code>, como no WhatsApp.
-            </p>
-          </section>
-
           <!--
-            Link sits at the end on purpose: it is a technical detail nobody
-            fills out first. The auto-slugify (title + `-dd-mm`) means most
-            people will not touch this field at all; those who care about the
-            URL can override it as their last step before submitting.
+            Advanced is a native <details>: collapsing only hides it, the
+            inputs stay in the form and keep their values. `ignore_attributes`
+            stops LiveView patches from resetting the open/closed state the
+            browser owns. The `.OpenOnInvalid` hook covers the one gap: an
+            invalid field inside a collapsed <details> silently blocks the
+            submit, so it opens the card and lets the browser point at it.
           -->
-          <section class="mt-3 rounded-card border border-hairline bg-base-100 p-4 shadow-card">
-            <h2 class="text-[13px] font-extrabold">Link</h2>
-            <p class="mt-0.5 text-[11px] leading-relaxed text-muted">
-              A gente já sugere um link a partir do nome e da data — dá pra trocar
-              se você quiser algo diferente.
-            </p>
-
-            <div class="mt-3.5">
-              <.input
-                field={@form[:slug]}
-                label="Endereço do rolê"
-                placeholder="volei-ver-o-beach"
-                required
+          <details
+            id="new-event-advanced"
+            phx-hook=".OpenOnInvalid"
+            phx-mounted={JS.ignore_attributes(["open"])}
+            class="group mt-3 rounded-card border border-hairline bg-base-100 shadow-card"
+          >
+            <summary class="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 p-4 [&::-webkit-details-marker]:hidden">
+              <div>
+                <h2 class="text-[13px] font-extrabold">Avançado</h2>
+                <p class="mt-0.5 text-[11px] text-muted">
+                  Vagas, visibilidade, senha e link. Já vem preenchido.
+                </p>
+              </div>
+              <.icon
+                name="tabler-chevron-down"
+                class="size-[18px] shrink-0 text-muted transition-transform group-open:rotate-180"
               />
-              <p class="mt-2 text-[11px] text-muted">
-                Vira <code class="font-mono">/r/{@form[:slug].value || "seu-link"}</code>
-              </p>
+            </summary>
+
+            <div class="divide-y divide-hairline border-t border-hairline px-4">
+              <div class="py-4">
+                <h3 class="text-[13px] font-bold">Vagas</h3>
+                <div class="mt-3 grid grid-cols-2 gap-2">
+                  <.input
+                    field={@form[:main_size]}
+                    type="number"
+                    label="Na lista"
+                    min="1"
+                    max="500"
+                  />
+                  <.input
+                    field={@form[:wait_size]}
+                    type="number"
+                    label="Na espera"
+                    min="0"
+                    max="100"
+                  />
+                </div>
+                <p class="mt-2 text-[11px] text-muted">
+                  0 na espera desliga a fila. Depois de criada, ela não tem limite.
+                </p>
+                <div class="mt-3">
+                  <.input
+                    field={@form[:auto_promote]}
+                    type="checkbox"
+                    label="Promover automaticamente da reserva"
+                  />
+                  <p class="-mt-1 text-[11px] text-muted">
+                    Quando alguém sair da lista, o próximo da reserva entra sozinho.
+                  </p>
+                </div>
+              </div>
+
+              <div class="py-4">
+                <h3 class="text-[13px] font-bold">Visibilidade</h3>
+                <p class="mt-0.5 text-[11px] text-muted">
+                  Oculto não aparece na home. Só quem tem o link entra.
+                </p>
+                <label class="mt-3 flex min-h-11 items-center gap-2 text-[13px]">
+                  <input
+                    type="checkbox"
+                    name="event[hidden]"
+                    value="true"
+                    checked={@form[:hidden].value in [true, "true", "on"]}
+                    class="size-4 rounded border-ink/30 text-accent focus:ring-accent"
+                  />
+                  <span class="font-bold">Oculto</span>
+                </label>
+              </div>
+
+              <div class="py-4">
+                <h3 class="text-[13px] font-bold">Senha</h3>
+                <p class="mt-0.5 text-[11px] text-muted">
+                  Em branco, qualquer um com o link entra. Com senha, o link sozinho não basta.
+                </p>
+                <div class="mt-3">
+                  <.input
+                    field={@form[:access_code]}
+                    label="Senha da lista"
+                    {RolezinhoWeb.AccessCodeField.ignore_attrs()}
+                  />
+                </div>
+              </div>
+
+              <!--
+                The auto-slugify (title + `-dd-mm`) fills this in, so most
+                people never open it. It is not `required` in the browser: a
+                required field inside a collapsed <details> blocks the submit
+                with no visible field to fix. The server still rejects an
+                empty slug.
+              -->
+              <div id="new-event-link" class="py-4">
+                <h3 class="text-[13px] font-bold">Link</h3>
+                <p class="mt-0.5 text-[11px] leading-relaxed text-muted">
+                  A gente já sugere um link a partir do nome e da data — dá pra trocar
+                  se você quiser algo diferente.
+                </p>
+                <div class="mt-3">
+                  <.input
+                    field={@form[:slug]}
+                    label="Endereço do rolê"
+                    placeholder="volei-ver-o-beach"
+                  />
+                  <p class="mt-2 text-[11px] text-muted">
+                    Vira <code class="font-mono">/r/{@form[:slug].value || "seu-link"}</code>
+                  </p>
+                </div>
+              </div>
             </div>
-          </section>
+          </details>
+          <script :type={Phoenix.LiveView.ColocatedHook} name=".OpenOnInvalid">
+            export default {
+              mounted() {
+                this.el.addEventListener("invalid", () => { this.el.open = true }, true)
+              }
+            }
+          </script>
         </.form>
       </div>
     </Layouts.app>
