@@ -81,4 +81,70 @@ defmodule Rolezinho.MultiShareTest do
       refute MultiShare.to_text(events, &url/1) =~ "fofoca"
     end
   end
+
+  describe "to_image_rows/1" do
+    test "builds one row per event with title, place, time and count" do
+      [row] =
+        MultiShare.to_image_rows([
+          event(
+            title: "  Vôlei ",
+            local: "Quadra do Ibirapuera",
+            starts_at: ~U[2026-12-04 22:00:00Z],
+            main_capacity: 18,
+            main_list: attendees([{"Ana", false}, {"Bia", true}, {" ", false}])
+          )
+        ])
+
+      assert row == %{
+               title: "Vôlei",
+               place: "Quadra do Ibirapuera",
+               when: "Sex, 04/12 · 19h",
+               count: 2,
+               total: 18,
+               tag: nil
+             }
+    end
+
+    test "shows minutes only when the start is not on the hour" do
+      [row] = MultiShare.to_image_rows([event(starts_at: ~U[2026-12-13 00:30:00Z])])
+
+      assert row.when == "Sáb, 12/12 · 21h30"
+    end
+
+    test "leaves time and place out when unset" do
+      [row] = MultiShare.to_image_rows([event(local: "  ")])
+
+      assert row.when == nil
+      assert row.place == nil
+    end
+
+    test "payments-only counts paid over filled and carries a tag" do
+      [row] =
+        MultiShare.to_image_rows([
+          event(
+            status: :payments_only,
+            main_capacity: 20,
+            main_list: attendees([{"Ana", true}, {"Bia", false}, {"", false}])
+          )
+        ])
+
+      assert {row.count, row.total, row.tag} == {1, 2, "Apenas pagamentos"}
+    end
+
+    test "the tentative status carries its label as the tag" do
+      [row] = MultiShare.to_image_rows([event(status: :maybe)])
+
+      assert row.tag == "Averiguando Resenha"
+    end
+
+    test "a password-protected event keeps its place and password out" do
+      [row] =
+        MultiShare.to_image_rows([
+          event(password: "fofoca", local: "Casa da Ana", title: "Trancado")
+        ])
+
+      assert row.place == nil
+      refute inspect(row) =~ "fofoca"
+    end
+  end
 end
