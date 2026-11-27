@@ -8,6 +8,7 @@
 
 if Mix.env() == :prod, do: raise("seeds wipe every user; refusing to run in prod")
 
+alias Rolezinho.Accounts
 alias Rolezinho.Accounts.User
 alias Rolezinho.Event
 alias Rolezinho.Events
@@ -20,22 +21,11 @@ Repo.delete_all(Event)
 Repo.delete_all(Group)
 Repo.delete_all(User)
 
-# Inserted directly rather than through `Accounts.register_user/1`: the short
-# `admin`/`user` credentials fail the signup rules (6+ char username, 8+ char
-# password), but sign-in only checks the hash, so they still log in.
-seed_user = fn username, admin? ->
-  %User{}
-  |> Ecto.Changeset.change(
-    username: username,
-    name: String.capitalize(username),
-    password_hash: Bcrypt.hash_pwd_salt(username),
-    admin: admin?
-  )
-  |> Repo.insert!()
-end
+{:ok, user} = Accounts.register_user(%{"username" => "user01", "password" => "user1234"})
+{:ok, admin} = Accounts.register_user(%{"username" => "admin1", "password" => "admin123"})
 
-admin = seed_user.("admin", true)
-user = seed_user.("user", false)
+# Signup never sets `admin`, by design (mass assignment), so grant it here.
+admin = admin |> Ecto.Changeset.change(admin: true) |> Repo.update!()
 
 seed_group = fn attrs, owner ->
   {:ok, group} = Groups.create(attrs, created_by_user_id: owner.id)
@@ -343,7 +333,7 @@ pelada_past =
 {:ok, _} = Events.set_status(pelada_past, :done)
 
 # 12. Inside a hidden, password-protected group: the group gate covers it.
-# `user` has a saved unlock for the group, so it opens for them signed in.
+# `user01` has a saved unlock for the group, so it opens for them signed in.
 create.(
   %{
     "title" => "Almoço de Domingo",
@@ -363,7 +353,7 @@ create.(
 )
 |> fill.([{"Tia Cida", true}, {"Primo Beto", false}])
 
-# 13-14. A password-protected group owned by `user`: one event collecting
+# 13-14. A password-protected group owned by `user01`: one event collecting
 # payments only, one hidden from the group page while it's being prepared.
 happy_hour =
   create.(
@@ -412,8 +402,8 @@ Seeded #{Repo.aggregate(User, :count)} users, #{Repo.aggregate(Group, :count)} g
 #{Repo.aggregate(Event, :count)} events.
 
 Sign in at /entrar:
-  admin / admin   platform admin
-  user  / user    regular account
+  admin1 / admin123   platform admin
+  user01 / user1234   regular account
 
   /r/volei-ver-o-beach          admin  room left, some unpaid
   /r/futevolei-da-praia         user   full, queue behind it
@@ -424,11 +414,11 @@ Sign in at /entrar:
   /r/beach-tennis-de-domingo    admin  closed, in the past
   /r/trilha-no-utinga           user   status "maybe"
 
-  /g/pelada-do-bairro           admin  public, no password; `user` follows it
+  /g/pelada-do-bairro           admin  public, no password; `user01` follows it
     /r/pelada-de-quarta         admin  room left
     /r/pelada-de-sabado         user   full, queue behind it
     /r/pelada-da-semana-passada admin  closed, in the past
-  /g/familia-souza              admin  hidden, password: SOUZA; `user` has it unlocked
+  /g/familia-souza              admin  hidden, password: SOUZA; `user01` has it unlocked
     /r/almoco-de-domingo        admin  gated by the group
   /g/galera-do-trampo           user   public, password: TRAMPO
     /r/happy-hour-de-novembro   user   payments only, total split
