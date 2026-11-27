@@ -48,7 +48,8 @@ defmodule RolezinhoWeb.PasswordManagerOptOutTest do
 
   describe "no input is named or id'd like a password" do
     test "event create form", %{conn: conn} do
-      {:ok, _view, html} = live(admin(conn), ~p"/criar")
+      {:ok, view, _html} = live(admin(conn), ~p"/criar")
+      html = view |> element("#new-event-add-payment") |> render_click()
       assert password_like_inputs(html, "#new-event-form") == []
     end
 
