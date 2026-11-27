@@ -38,6 +38,7 @@ defmodule RolezinhoWeb.HomeLive do
      |> assign(:shareable_events, [])
      |> assign(:share_selected, nil)
      |> assign(:share_password?, false)
+     |> assign(:share_image?, false)
      |> load_events()}
   end
 
@@ -70,6 +71,13 @@ defmodule RolezinhoWeb.HomeLive do
     {:noreply,
      socket
      |> assign(:share_password?, not socket.assigns.share_password?)
+     |> assign_multi_share_text()}
+  end
+
+  def handle_event("multi_share_toggle_image", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:share_image?, not socket.assigns.share_image?)
      |> assign_multi_share_text()}
   end
 
@@ -148,16 +156,27 @@ defmodule RolezinhoWeb.HomeLive do
   end
 
   defp assign_multi_share_text(socket) do
-    %{shareable_events: events, share_selected: selected, share_password?: password?} =
-      socket.assigns
+    %{
+      shareable_events: events,
+      share_selected: selected,
+      share_password?: password?,
+      share_image?: image?
+    } = socket.assigns
 
-    text =
-      events
-      |> Enum.filter(&MapSet.member?(selected, &1.id))
-      |> MultiShare.to_text(&event_url/1, include_password: password?)
+    selected_events = Enum.filter(events, &MapSet.member?(selected, &1.id))
 
-    assign(socket, :multi_share_text, text)
+    socket
+    |> assign(
+      :multi_share_text,
+      MultiShare.to_text(selected_events, &event_url/1, include_password: password?)
+    )
+    |> assign(:multi_share_image_rows, image_rows(image?, selected_events))
   end
+
+  defp image_rows(false, _events), do: []
+  defp image_rows(true, events), do: MultiShare.to_image_rows(events)
+
+  defp app_host, do: URI.parse(RolezinhoWeb.Endpoint.url()).host
 
   defp event_url(%Event{slug: slug}), do: RolezinhoWeb.Endpoint.url() <> "/r/" <> slug
 
@@ -420,9 +439,20 @@ defmodule RolezinhoWeb.HomeLive do
           </li>
         </ul>
 
+        <label class="mt-3 flex items-center gap-2.5 rounded-row bg-tint px-3 py-2.5">
+          <input
+            id="multi-share-image-toggle"
+            type="checkbox"
+            class={checkbox_class()}
+            phx-click="multi_share_toggle_image"
+            checked={@share_image?}
+          />
+          <span class="text-xs font-semibold">Gerar imagem</span>
+        </label>
+
         <label
-          :if={@share_has_password?}
-          class="mt-3 flex items-center gap-2.5 rounded-row bg-tint px-3 py-2.5"
+          :if={@share_has_password? and not @share_image?}
+          class="mt-2 flex items-center gap-2.5 rounded-row bg-tint px-3 py-2.5"
         >
           <input
             id="multi-share-password-toggle"
@@ -434,9 +464,48 @@ defmodule RolezinhoWeb.HomeLive do
           <span class="text-xs font-semibold">Incluir as senhas no texto</span>
         </label>
 
-        <.share_preview text={@multi_share_text} class="mt-3" />
+        <.share_preview :if={not @share_image?} text={@multi_share_text} class="mt-3" />
 
-        <:actions>
+        <%!-- The image never carries passwords: it is meant for public posts. --%>
+        <div
+          :if={@share_image?}
+          id="multi-share-image"
+          phx-hook="ShareImage"
+          data-rows={Jason.encode!(@multi_share_image_rows)}
+          data-host={app_host()}
+          class="mt-3"
+        >
+          <canvas
+            id="multi-share-image-canvas"
+            phx-update="ignore"
+            role="img"
+            aria-label="Prévia da imagem com seus rolezinhos"
+            class="mx-auto aspect-[4/5] w-full max-w-72 rounded-cta border border-ink/8 bg-canvas"
+          />
+        </div>
+
+        <:actions :if={@share_image?}>
+          <button
+            id="multi-share-image-download-btn"
+            type="button"
+            data-share-image-action="download"
+            data-target="multi-share-image"
+            class="flex-1 rounded-row bg-ink/[0.06] py-3 text-xs font-bold text-ink"
+          >
+            Baixar
+          </button>
+          <button
+            id="multi-share-image-share-btn"
+            type="button"
+            data-share-image-action="share"
+            data-target="multi-share-image"
+            class="flex-1 rounded-row bg-ink py-3 text-xs font-bold text-ink-content"
+          >
+            Compartilhar
+          </button>
+        </:actions>
+
+        <:actions :if={not @share_image?}>
           <button
             id="multi-share-copy-btn"
             type="button"

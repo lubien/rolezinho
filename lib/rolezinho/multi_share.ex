@@ -12,6 +12,9 @@ defmodule Rolezinho.MultiShare do
   Each line carries the status label (none for `:active`) and a count:
   filled/capacity, except `:payments_only`, which shows paid/filled — once
   signups close, what matters is who still owes.
+
+  The same selection also ships as a shareable image (`to_image_rows/1`): one
+  row per event with its title, place, start time, count, and status tag.
   """
 
   alias Rolezinho.Event
@@ -35,6 +38,69 @@ defmodule Rolezinho.MultiShare do
   end
 
   defp title, do: "Rolezinhos ativos"
+
+  @typedoc "One row of the shareable image."
+  @type image_row :: %{
+          title: String.t(),
+          place: String.t() | nil,
+          when: String.t() | nil,
+          count: non_neg_integer(),
+          total: non_neg_integer(),
+          tag: String.t() | nil
+        }
+
+  @doc """
+  The rows of the shareable image for `events`, in the given order.
+
+  The count follows the text: filled/capacity, or paid/filled for
+  `:payments_only`. The image is meant for public posts, so it never carries a
+  password — and a password-protected event leaves its place out too, since
+  the place is part of what the password gates.
+  """
+  @spec to_image_rows([Event.t()]) :: [image_row()]
+  def to_image_rows(events) when is_list(events), do: Enum.map(events, &image_row/1)
+
+  defp image_row(%Event{} = event) do
+    {count, total} = image_count(event)
+
+    %{
+      title: String.trim(event.title || ""),
+      place: image_place(event),
+      when: image_when(event.starts_at),
+      count: count,
+      total: total,
+      tag: image_tag(event.status)
+    }
+  end
+
+  defp image_count(%Event{status: :payments_only} = event) do
+    filled = filled(event)
+    {Enum.count(filled, & &1.paid), length(filled)}
+  end
+
+  defp image_count(%Event{} = event), do: {length(filled(event)), event.main_capacity}
+
+  defp image_place(%Event{} = event) do
+    place = String.trim(event.local || "")
+    if place == "" or Event.password_protected?(event), do: nil, else: place
+  end
+
+  defp image_tag(:payments_only), do: "Apenas pagamentos"
+  defp image_tag(:maybe), do: Event.maybe_status_label()
+  defp image_tag(_status), do: nil
+
+  defp image_when(nil), do: nil
+
+  # Stored in UTC, read in Brasília — same offset the home cards use.
+  defp image_when(%DateTime{} = starts_at) do
+    local = DateTime.add(starts_at, -3 * 3600, :second)
+    weekday = Enum.at(weekday_names(), Date.day_of_week(local) - 1)
+    hour = if local.minute == 0, do: "%Hh", else: "%Hh%M"
+
+    Calendar.strftime(local, "#{weekday}, %d/%m · #{hour}")
+  end
+
+  defp weekday_names, do: ~w(Seg Ter Qua Qui Sex Sáb Dom)
 
   defp line(%Event{} = event, url, include_password?) do
     base = "* #{String.trim(event.title || "")}: #{summary(event)}. #{url}"

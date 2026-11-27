@@ -139,4 +139,61 @@ defmodule RolezinhoWeb.HomeMultiShareTest do
 
     refute has_element?(view, "#multi-share-password-toggle")
   end
+
+  defp image_rows(view) do
+    view
+    |> element("#multi-share-image")
+    |> render()
+    |> LazyHTML.from_fragment()
+    |> LazyHTML.attribute("data-rows")
+    |> List.first()
+    |> Jason.decode!()
+  end
+
+  describe "image mode" do
+    test "is off by default and swaps the text preview for the image", %{conn: conn} do
+      owner = create_user("ms-owner-img-1")
+      create_event(owner, %{"title" => "Vôlei", "slug" => "ms-img-volei"})
+
+      {:ok, view, _html} = live(signed_in(conn, owner), ~p"/")
+
+      refute has_element?(view, "#multi-share-image")
+      assert has_element?(view, "#multi-share-copy-btn")
+
+      view |> element("#multi-share-image-toggle") |> render_click()
+
+      assert has_element?(view, "#multi-share-image-toggle[checked]")
+      assert has_element?(view, "#multi-share-image canvas")
+      assert has_element?(view, "#multi-share-image-share-btn")
+      assert has_element?(view, "#multi-share-image-download-btn")
+      refute has_element?(view, "#multi-share-copy-btn")
+
+      assert [%{"title" => "Vôlei", "count" => 0, "total" => 3}] = image_rows(view)
+    end
+
+    test "follows the selection", %{conn: conn} do
+      owner = create_user("ms-owner-img-2")
+      volei = create_event(owner, %{"title" => "Vôlei", "slug" => "ms-img-volei-2"})
+      create_event(owner, %{"title" => "Churras", "slug" => "ms-img-churras-2"})
+
+      {:ok, view, _html} = live(signed_in(conn, owner), ~p"/")
+      view |> element("#multi-share-image-toggle") |> render_click()
+      view |> element("#multi-share-event-#{volei.id}") |> render_click()
+
+      assert [%{"title" => "Churras"}] = image_rows(view)
+    end
+
+    test "never carries a password, even with the password toggle on", %{conn: conn} do
+      owner = create_user("ms-owner-img-3")
+      locked = create_event(owner, %{"title" => "Trancado", "slug" => "ms-img-locked"})
+      {:ok, _} = Events.update_password(locked, "fofoca")
+
+      {:ok, view, _html} = live(signed_in(conn, owner), ~p"/")
+      view |> element("#multi-share-password-toggle") |> render_click()
+      view |> element("#multi-share-image-toggle") |> render_click()
+
+      refute has_element?(view, "#multi-share-password-toggle")
+      refute render(view) =~ "fofoca"
+    end
+  end
 end

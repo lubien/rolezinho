@@ -1,5 +1,5 @@
 ---
-updated_at: 06/11/2026
+updated_at: 27/11/2026
 ---
 
 # Home Page
@@ -8,6 +8,10 @@ updated_at: 06/11/2026
 > and `member_label/1` in
 > [role_card.ex](../../lib/rolezinho_web/components/ui/role_card.ex). A change to one
 > requires a change to the other in the same commit.
+>
+> Paired source: the share image's light palette in
+> [share_image.js](../../assets/js/hooks/share_image.js) mirrors the `colors` frontmatter
+> in `DESIGN.md`. A change to one requires a change to the other in the same commit.
 
 ## Overview
 
@@ -15,7 +19,7 @@ The home page (`/`) lists what is happening: public groups, public events, and e
 event the viewer is part of. The viewer's own events stand out in blue with a pill
 saying how they are involved ("Participando", "Na espera", "Organizando", or
 "Caloteiro"). Signed-in organizers can also bundle their events into one message for a
-group chat ("Multi share").
+group chat, or one image for a social post ("Multi share").
 
 ---
 
@@ -34,6 +38,10 @@ group chat ("Multi share").
 > **Marina** wants to remind her friends of everything she has open this week. She
 > taps the share button, unticks the finished-but-not-closed karaokê, and pastes
 > "Rolezinhos ativos" with three lines and links into the group chat.
+
+> **Rafael** wants his followers to see what is on this month. In the same sheet he
+> ticks "Gerar imagem", checks the preview — names, places, times, and "12/18" next to
+> each — and taps "Compartilhar" to post the picture to his Instagram story.
 
 ---
 
@@ -144,15 +152,21 @@ device that holds the tokens; signing in makes it follow the account.
 ## Multi Share
 
 A share button in the header, for signed-in users who created at least one shareable
-event. It opens a sheet listing those events, all checked by default, with a live
-preview and "Copiar" / "Compartilhar" actions.
+event. It opens a sheet listing those events, all checked by default. Below the list,
+the "Gerar imagem" checkbox picks the output: a text message (default) or an image.
+Both follow the same selection.
 
 - **Which events:** `Events.list_shareable_for/1` — created by the user and not
   `:done`, hidden and grouped included — minus events inside a group the viewer can't
   currently open, so their titles never reach the page.
 - **Selection** is kept on the server. A toggled id is honored only if it belongs to
   the viewer's shareable events, so a forged id can't pull someone else's event into
-  the text.
+  the output.
+
+### Text
+
+A live preview of the message with "Copiar" / "Compartilhar" actions.
+
 - **Passwords:** "Incluir as senhas no texto" appears when one of the events has a
   password. Passwords are part of the page only while it is checked.
 - **Message** (`Rolezinho.MultiShare.to_text/3`):
@@ -167,6 +181,46 @@ Rolezinhos ativos
 
 Counts are zero-padded to two digits: filled/capacity, or paid/filled under
 "Apenas pagamentos".
+
+### Image
+
+A preview of a 1080x1350 (4:5) PNG with "Baixar" / "Compartilhar" actions.
+"Compartilhar" opens the system share sheet with the file where the browser can share
+files, and downloads it otherwise.
+
+- **Rows** (`Rolezinho.MultiShare.to_image_rows/1`): title, place, start time
+  ("Sex, 04/12 · 19h", minutes only when not on the hour, read in Brasília), the count,
+  and a status tag ("Apenas pagamentos" or "Averiguando Resenha"). The count follows the
+  text: filled/capacity, or paid/filled under "Apenas pagamentos".
+- **Public by design:** the image is meant for social posts, so it never carries a
+  password, and a password-protected event leaves its place out — the place is part of
+  what the password gates. The password checkbox is hidden while "Gerar imagem" is on.
+- **Drawing** happens in the browser, in the `ShareImage` hook, on a `<canvas>`: the
+  "Rolezinhos" title with the logo and the app's host, a card with one row per event,
+  and the footer "Feito com [heart] em <host>", the heart drawn in the accent color. Always in the light palette, whatever the
+  viewer's theme.
+- **Layout by size:** up to three rows get a roomy layout (larger type, place and time
+  on separate lines); four to seven share one compact meta line; eight or more show six
+  rows plus "+N rolezinhos". Long titles end in "…".
+
+```text
++-----------------------------------+
+| [logo]                            |
+| Rolezinhos                        |
+| rolezinho.lubien.dev              |
+|                                   |
+|  +-----------------------------+  |
+|  | Vôlei de quinta     (12/18) |  |
+|  | Quadra do Ibirapuera        |  |
+|  | Sex, 04/12 · 19h            |  |
+|  |-----------------------------|  |
+|  | Churras de fim...   (24/24) |  |
+|  | ...                         |  |
+|  +-----------------------------+  |
+|                                   |
+|  Feito com [heart] em rolezin...  |
++-----------------------------------+
+```
 
 ---
 
@@ -190,6 +244,8 @@ checked).
   the token matches a row or the organizer token.
 - Blue (`info`) means "the viewer is part of this", on cards and on groups alike.
 - Order: grouped events by group name, then ungrouped, each by date.
+- The Multi share image never carries a password, nor the place of a
+  password-protected event.
 
 ---
 
@@ -201,7 +257,8 @@ checked).
 | Context | [events.ex](../../lib/rolezinho/events.ex) |
 | Context | [groups.ex](../../lib/rolezinho/groups.ex) |
 | Membership | [membership.ex](../../lib/rolezinho/event/membership.ex) |
-| Multi share text | [multi_share.ex](../../lib/rolezinho/multi_share.ex) |
+| Multi share text and image rows | [multi_share.ex](../../lib/rolezinho/multi_share.ex) |
+| Multi share image drawing | [share_image.js](../../assets/js/hooks/share_image.js) |
 | Group access | [group.ex](../../lib/rolezinho/group.ex) |
 | Device tokens | [participant.ex](../../lib/rolezinho_web/plugs/participant.ex) |
 | Component | [role_card.ex](../../lib/rolezinho_web/components/ui/role_card.ex) |
