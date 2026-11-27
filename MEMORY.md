@@ -61,11 +61,11 @@ be useful without rereading the session.
   assume a lightness direction — a component that hardcodes "base-100 = lighter"
   inverts in dark.
 
-- 2026-07-26: **`escape: true` in Earmark is a security invariant, not a
-  preference.** An event's description/header/footer is user markdown rendered with
-  `raw(...)` in five places in `EventLive`. What prevents stored XSS is the
-  `escape: true` option on the project's single `Earmark.as_html/2` call. Do not
-  create a second markdown rendering path. Already promoted to `SECURITY.md`
+- 2026-07-26: **`escape: true` in the markdown renderer is a security invariant, not
+  a preference.** An event's description/header/footer is user markdown rendered with
+  `raw(...)` in `EventLive`. What prevents stored XSS is the `escape: true` option on
+  the project's single MDEx call in `RolezinhoWeb.Markdown`, plus its allowlist
+  sanitizer. Do not create a second markdown rendering path. Already promoted to `SECURITY.md`
   (section 1) in this session; it stays here as a reminder that this is the most
   fragile point in the code.
 - 2026-07-26: **There is no `current_scope` in this project.** The app is public and

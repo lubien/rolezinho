@@ -48,7 +48,7 @@ defmodule RolezinhoWeb.MarkdownTest do
   end
 
   describe "raw HTML" do
-    test "HTML blocks at the start of a line are stripped" do
+    test "HTML blocks at the start of a line never become markup" do
       for input <- [
             "<script>alert(1)</script>",
             "<iframe src=//evil.com></iframe>",
@@ -57,13 +57,25 @@ defmodule RolezinhoWeb.MarkdownTest do
             "<a href=\"javascript:alert(1)\">clique</a>",
             "<img src=x onerror=alert(1)>"
           ] do
-        html = Markdown.render(input)
+        document = input |> Markdown.render() |> LazyHTML.from_fragment()
 
-        refute html =~ ~r/<(script|iframe|form|input|div|img)\b/i,
+        assert Enum.empty?(LazyHTML.query(document, "script, iframe, form, input, div, img, a")),
                "leaked tag for #{inspect(input)}"
 
-        refute html =~ ~r/(onerror|style|javascript:)=?/i,
+        assert Enum.empty?(LazyHTML.query(document, "[style], [onerror], [href], [src]")),
                "leaked attribute for #{inspect(input)}"
+      end
+    end
+
+    test "attribute injection through a link URL or title stays inside the attribute" do
+      for input <- [
+            ~s{[x](http://a/?b=c" onerror="alert(1))},
+            ~s{[x](https://a.com "t" onmouseover="alert(1)")}
+          ] do
+        document = input |> Markdown.render() |> LazyHTML.from_fragment()
+
+        assert Enum.empty?(LazyHTML.query(document, "[onerror], [onmouseover]")),
+               "injected attribute for #{inspect(input)}"
       end
     end
 

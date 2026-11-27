@@ -31,7 +31,7 @@ is still no `current_scope`, and no per-user ownership beyond what
 access surface.
 
 Stack: Phoenix 1.8, LiveView 1.2, PostgreSQL, Tailwind v4 (tokens in the `@theme` block
-of `app.css`), Tabler icons, Earmark for markdown, deployed on Fly.io.
+of `app.css`), Tabler icons, MDEx for markdown, deployed on Fly.io.
 
 ## Read X when Y
 
@@ -81,9 +81,9 @@ of `app.css`), Tabler icons, Earmark for markdown, deployed on Fly.io.
 Breaking any of these is a bug, not a style choice:
 
 1. **User markdown renders only through `RolezinhoWeb.Markdown.render/1`.** Its
-   quote replacement, `escape: true`, and allowlist sanitizer together prevent stored
-   XSS in the `raw(...)` calls; `escape: true` alone lets HTML blocks through. Never
-   drop a step; never create a second markdown rendering path. (`SECURITY.md`,
+   `escape: true` in MDEx and the allowlist sanitizer together prevent stored XSS in
+   the `raw(...)` calls. Never drop either layer; never create a second markdown
+   rendering path. (`SECURITY.md`,
    section 1)
 2. **Admin requires the plug *and* the `on_mount`.** The plug protects the HTTP request;
    the `on_mount` protects the socket connection, which doesn't pass through the

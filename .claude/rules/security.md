@@ -16,10 +16,10 @@ Three things newcomers get wrong by assuming the ecosystem default:
 2. **Anonymous writes are the feature.** Any visitor writes to a public event's list.
    The weight authentication would carry in another project falls on input validation
    and on the admin boundary.
-3. **User markdown renders only through `RolezinhoWeb.Markdown.render/1`.** Its quote
-   replacement, `escape: true` in Earmark, and allowlist sanitizer are each an
-   invariant: `escape: true` alone lets a line starting with `<` through as raw HTML.
-   Never drop a step; never create a second markdown rendering path.
+3. **User markdown renders only through `RolezinhoWeb.Markdown.render/1`.** Its
+   `escape: true` in MDEx and its allowlist sanitizer are each an invariant: they are
+   independent layers, and each covers a hole the other might leave. Never drop a
+   layer; never create a second markdown rendering path.
 
 Before closing out any change, check the three questions at the end of `SECURITY.md`:
 
